@@ -1,0 +1,60 @@
+name: Attach Linux downloads
+on:
+  push:
+    branches: [main]
+    paths: ['.github/workflows/publish-linux.yml']
+  workflow_dispatch:
+    inputs:
+      build_run:
+        description: 'Successful Linux executable workflow run (empty selects the latest main push)'
+        required: false
+        type: string
+permissions:
+  actions: read
+  contents: write
+jobs:
+  upload:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 10
+    env:
+      GH_TOKEN: ${{ github.token }}
+      REQUESTED_RUN: ${{ inputs.build_run }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Select and validate the existing build and release draft
+        run: |
+          set -euo pipefail
+          tag="v$(node -p 'require("./package.json").version')"
+          run_id="$REQUESTED_RUN"
+          if [ -z "$run_id" ]; then
+            run_id="$(gh run list --repo "$GITHUB_REPOSITORY" --workflow build-linux.yml --branch main --event push --status success --limit 1 --json databaseId --jq '.[0].databaseId')"
+          fi
+          [[ "$run_id" =~ ^[0-9]+$ ]]
+          gh api "repos/$GITHUB_REPOSITORY/actions/runs/$run_id" > /tmp/build-run.json
+          gh release view "$tag" --repo "$GITHUB_REPOSITORY" --json isDraft,targetCommitish > /tmp/release.json
+          python3 - <<'PY'
+          import json,os
+          from pathlib import Path
+          run=json.loads(Path('/tmp/build-run.json').read_text())
+          release=json.loads(Path('/tmp/release.json').read_text())
+          assert run['conclusion']=='success' and run['event']=='push'
+          assert run['head_branch']=='main'
+          assert run['head_repository']['full_name']==os.environ['GITHUB_REPOSITORY']
+          assert run['path']=='.github/workflows/build-linux.yml'
+          assert release['isDraft'], 'La version publiée ne doit pas être modifiée.'
+          assert release['targetCommitish']==run['head_sha'], 'Le brouillon et le build doivent viser le même commit.'
+          PY
+          echo "RELEASE_TAG=$tag" >> "$GITHUB_ENV"
+          echo "BUILD_RUN=$run_id" >> "$GITHUB_ENV"
+      - name: Download existing tested artifacts
+        run: gh run download "$BUILD_RUN" --repo "$GITHUB_REPOSITORY" --name Interprete-Linux-x86_64 --dir release-assets
+      - name: Verify hashes and attach to the draft
+        run: |
+          set -euo pipefail
+          cd release-assets
+          sha256sum -c SHA256SUMS
+          version="${RELEASE_TAG#v}"
+          gh release upload "$RELEASE_TAG" \
+            "Interprete-$version-linux-x86_64.AppImage" \
+            "Interprete-$version-linux-x64.tar.gz" \
+            SHA256SUMS --repo "$GITHUB_REPOSITORY"
