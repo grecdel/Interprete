@@ -1,0 +1,425 @@
+'use strict';
+
+const companion = document.getElementById('companion');
+// Keep references when the companion moves into its floating window.
+const ui = Object.fromEntries([...companion.querySelectorAll('[id]')].map(node => [node.id, node]));
+const archive = window.InterpreteArchive;
+let configured = null;
+let busy = false;
+let wantedListening = false;
+let listening = false;
+let pendingSpeech = '';
+let pendingTranscriptIds = [];
+let pendingSince = 0;
+let finalPreview = '';
+let liveTimer;
+let restartTimer;
+let restartCount = 0;
+let lastRequest = 0;
+let entryCount = 0;
+let unreadCount = 0;
+let floatingWindow = null;
+let floatingSize = {width: 380, height: 720};
+const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+const recognition = SpeechRecognition ? new SpeechRecognition() : null;
+const verdictStyles = {'Confirmé': 'confirmed', 'Contredit': 'contradicted', 'À nuancer': 'nuanced', 'Informations insuffisantes': 'unsure'};
+
+function node(tag, className, text) {
+  const element = companion.ownerDocument.createElement(tag);
+  if (className) element.className = className;
+  if (text !== undefined) element.textContent = text;
+  return element;
+}
+function icon(name) {
+  const svg = companion.ownerDocument.createElementNS('http://www.w3.org/2000/svg', 'svg');
+  svg.setAttribute('class', 'icon'); svg.setAttribute('aria-hidden', 'true');
+  const use = companion.ownerDocument.createElementNS('http://www.w3.org/2000/svg', 'use');
+  use.setAttribute('href', `#i-${name}`); svg.append(use);
+  return svg;
+}
+function showError(message) {
+  ui['error-text'].textContent = message; ui.error.hidden = false;
+}
+function updateStatus() {
+  ui.status.textContent = busy ? 'Recherche des sources…' : wantedListening ? (listening ? 'À l’écoute du direct' : 'Connexion au micro…') : 'À votre écoute, à votre rythme';
+  companion.classList.toggle('is-listening', listening);
+  companion.classList.toggle('is-busy', busy);
+  ui.microphone.setAttribute('aria-pressed', String(wantedListening));
+  ui['listen-title'].textContent = wantedListening ? (listening ? 'À l’écoute du reportage' : 'Ouverture du micro…') : 'Écouter un reportage';
+  ui['listen-subtitle'].textContent = wantedListening ? 'Cliquez pour mettre l’écoute en pause.' : 'Un clic. Les infos se vérifient au fil du direct.';
+  ui.microphone.querySelector('use').setAttribute('href', wantedListening ? '#i-pause' : '#i-mic');
+  ui.bubble.setAttribute('aria-label', wantedListening ? 'Mettre l’écoute en pause' : 'Écouter un reportage et ouvrir Interprete');
+  ui['bubble-label'].textContent = wantedListening ? 'Cliquer pour mettre en pause' : busy ? 'Vérification en cours…' : 'Un clic pour écouter';
+  if (!recognition) {
+    ui['listen-title'].textContent = 'La saisie reste à votre écoute';
+    ui['listen-subtitle'].textContent = 'Pour le micro, utilisez Chrome sur ordinateur.';
+    ui.bubble.setAttribute('aria-label', 'Ouvrir Interprete et saisir un contenu');
+    ui['bubble-label'].textContent = 'Un clic pour ouvrir';
+  }
+  ui.verify.disabled = busy || ui.transcript.value.trim().length < 10;
+  ui['export-html'].disabled = busy;
+}
+function updateArchiveCount() {
+  const count = archive.session.transcript.length;
+  ui['archive-count'].textContent = `${count} propos transcrit${count > 1 ? 's' : ''}`;
+}
+async function refreshConfiguration() {
+  try {
+    const response = await fetch('/api/status', {cache: 'no-store'});
+    if (!response.ok) throw new Error();
+    configured = Boolean((await response.json()).configured);
+    ui.configuration.hidden = configured;
+    return configured;
+  } catch {
+    configured = null;
+    showError('Interprete ne parvient pas à joindre le serveur. Vérifiez qu’il est démarré.');
+    return false;
+  }
+}
+
+function setPanelOpen(open) {
+  companion.classList.toggle('is-open', open);
+  ui['assistant-panel'].hidden = !open;
+  ui.bubble.setAttribute('aria-expanded', String(open));
+  if (open) {
+    unreadCount = 0; ui.unread.hidden = true;
+    if (floatingWindow) {
+      try { floatingWindow.resizeTo(floatingSize.width, floatingSize.height); } catch { /* Browser controls window dimensions. */ }
+    }
+  } else {
+    stopListening();
+    if (floatingWindow) {
+      floatingSize = {width: floatingWindow.innerWidth, height: floatingWindow.innerHeight};
+      try { floatingWindow.resizeTo(250, 150); } catch { /* Keep a usable window if resizing is denied. */ }
+    }
+    ui.bubble.focus();
+  }
+}
+function updateComposer() {
+  const value = ui.transcript.value.trim();
+  const link = /^https?:\/\/\S+$/i.test(value);
+  ui['input-kind'].replaceChildren(icon(link ? 'link' : 'text'), companion.ownerDocument.createTextNode(link ? 'Lien à explorer' : value.length > 600 ? 'Article à vérifier' : 'Texte ou lien'));
+  ui['character-count'].hidden = value.length < 1000;
+  ui['character-count'].textContent = `${value.length.toLocaleString('fr-FR')} / 20 000`;
+  ui.transcript.style.height = 'auto';
+  ui.transcript.style.height = `${Math.min(ui.transcript.scrollHeight, 180)}px`;
+  updateStatus();
+}
+function cleanText(text) {
+  return String(text || '').replace(/【[^】]*】/g, '').replace(/[^]*/g, '').replace(/\[([^\]]+)\]\(https?:\/\/[^\s)]+\)/g, '$1').replace(/\*\*([^*]+)\*\*/g, '$1').trim();
+}
+function sourceList(sources) {
+  const list = node('div', 'sources');
+  const validSources = [];
+  for (const source of sources || []) {
+    try {
+      const url = new URL(source.url);
+      if (!['https:', 'http:'].includes(url.protocol) || url.username || url.password) continue;
+      validSources.push({url, title: cleanText(source.title) || url.hostname});
+    } catch { /* Ignore an unusable citation, without losing the remaining results. */ }
+  }
+  if (!validSources.length) return null;
+  list.append(node('p', 'sources-label', validSources.length > 1 ? 'SOURCES À CONSULTER' : 'SOURCE À CONSULTER'));
+  for (const source of validSources) {
+    const link = node('a', 'source-link');
+    link.href = source.url.href; link.target = '_blank'; link.rel = 'noopener noreferrer';
+    const domain = source.url.hostname.replace(/^www\./, '');
+    link.append(node('span', 'source-monogram', domain[0].toUpperCase()));
+    const copy = node('span', 'source-copy');
+    copy.append(node('span', 'source-title', source.title), node('span', 'source-domain', domain));
+    link.append(copy, icon('popout')); list.append(link);
+  }
+  return list;
+}
+function renderCheck(check) {
+  const card = node('article', 'result-card');
+  if (check.id) card.id = check.id;
+  const sources = sourceList(check.sources);
+  let verdict = check.verdict;
+  if (verdict in verdictStyles && !sources) verdict = 'Informations insuffisantes';
+  card.append(node('span', `verdict ${verdictStyles[verdict] || 'unsure'}`, verdict || 'Éclairage'));
+  card.append(node('h4', '', cleanText(check.claim)), node('p', 'result-summary', cleanText(check.summary)));
+  const evidence = Array.isArray(check.evidence) ? check.evidence.filter(item => typeof item === 'string') : [];
+  if (check.follow_up) {
+    const followUp = node('div', 'follow-up');
+    followUp.append(node('span', 'follow-up-label', 'POUR REBONDIR · PISTE DE RELANCE'), node('p', '', cleanText(check.follow_up)));
+    const copy = node('button', 'copy-question', 'Copier la question'); copy.type = 'button';
+    copy.onclick = async () => {
+      try { await navigator.clipboard.writeText(check.follow_up); copy.textContent = 'Question copiée'; }
+      catch { showError('La copie est indisponible. Vous pouvez sélectionner la question directement.'); }
+    };
+    followUp.append(copy); card.append(followUp);
+  }
+  if (check.reasoning || evidence.length || check.limitations?.length || check.source_excerpts?.length) {
+    const details = node('details', 'reasoning');
+    const summary = node('summary', '', 'Comprendre la vérification'); summary.append(icon('chevron')); details.append(summary);
+    if (check.reasoning) details.append(node('p', '', cleanText(check.reasoning)));
+    if (evidence.length) {
+      const list = node('ol', 'evidence-list');
+      for (const point of evidence) list.append(node('li', '', cleanText(point)));
+      details.append(list);
+    }
+    for (const limitation of check.limitations || []) details.append(node('p', 'limitation', cleanText(limitation)));
+    for (const excerpt of check.source_excerpts || []) {
+      const quote = node('blockquote', 'source-excerpt');
+      quote.append(node('span', '', 'Extrait proposé · à relire dans le document'), node('p', '', cleanText(excerpt.quote)));
+      const link = sourceList([{url: excerpt.url, title: excerpt.published_at ? `Document · date indiquée : ${excerpt.published_at}` : 'Ouvrir le document original'}]);
+      if (link) quote.append(link); details.append(quote);
+    }
+    card.append(details);
+  }
+  for (const connection of check.connections || []) {
+    const target = archive.lookup(connection.target_id); if (!target) continue;
+    const details = node('details', `connection-note ${connection.relation === 'contradiction_potentielle' ? 'potential-conflict' : ''}`);
+    const summary = node('summary', '', archive.labels[connection.relation] || 'Connexion'); summary.append(icon('chevron')); details.append(summary);
+    details.append(node('blockquote', '', `« ${target.claim} »`), node('p', '', cleanText(connection.explanation)), node('small', '', target.session_title || 'Plus tôt dans cette interview'));
+    const original = node('details', 'original-excerpt'); original.append(node('summary', '', 'Relire le propos d’origine'), node('p', '', target.original_text)); details.append(original);
+    card.append(details);
+  }
+  if (sources) card.append(sources);
+  else card.append(node('p', 'source-warning', 'Aucune source associée : les éléments ne permettent pas de conclure.'));
+  card.append(node('p', 'editorial-note', 'Analyse automatique · sources à relire avant toute relance factuelle.'));
+  return card;
+}
+function createEntry(text, kind) {
+  ui['empty-feed'].hidden = true;
+  const group = node('section', 'feed-group');
+  const meta = node('div', 'entry-meta');
+  meta.append(icon(kind === 'live' ? 'mic' : kind === 'url' ? 'link' : 'text'), companion.ownerDocument.createTextNode(kind === 'live' ? 'En direct' : kind === 'url' ? 'Lien partagé' : text.length > 600 ? 'Article partagé' : 'Texte partagé'));
+  const now = new Date();
+  const time = node('time', '', now.toLocaleTimeString('fr-FR', {hour: '2-digit', minute: '2-digit'}));
+  time.dateTime = now.toISOString(); meta.append(time); group.append(meta);
+  const pending = node('div', 'searching'); pending.append(node('span', 'spinner'), node('span', '', 'Interprete remonte aux sources…')); group.append(pending);
+  const excerpt = node('details', 'original-excerpt');
+  excerpt.append(node('summary', '', kind === 'live' ? 'Ce qui a été entendu' : 'Contenu soumis'), node('p', '', text)); group.append(excerpt);
+  ui.feed.prepend(group); ui.feed.scrollTop = 0;
+  return {group, pending, excerpt};
+}
+async function runVerification(text, kind, entry = null, transcriptIds = []) {
+  if (busy) return false;
+  busy = true; updateStatus(); ui.error.hidden = true;
+  if (configured !== true && !await refreshConfiguration()) {
+    if (configured === false) showError('La recherche sera disponible une fois la clé API configurée sur le serveur. Vous pouvez déjà préparer votre texte.');
+    busy = false; updateStatus(); return false;
+  }
+  const current = entry || createEntry(text, kind);
+  const context = archive.context();
+  if (!current.record) current.record = archive.createSubmission(text, kind, transcriptIds);
+  current.record.status = 'pending';
+  if (entry) {
+    current.group.querySelector('.failed-search')?.remove();
+    current.pending = node('div', 'searching'); current.pending.append(node('span', 'spinner'), node('span', '', 'Nouvelle recherche des sources…'));
+    current.group.insertBefore(current.pending, current.excerpt);
+  }
+  lastRequest = Date.now();
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 100000);
+  try {
+    const response = await fetch('/api/verify', {method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({transcript: text, kind: kind === 'live' ? 'live' : 'auto', context}), signal: controller.signal});
+    const result = await response.json();
+    if (!response.ok) throw new Error(result.error || 'La recherche a échoué.');
+    const checks = archive.completeSubmission(current.record, result);
+    current.record.checked_at = result.checked_at;
+    current.pending.remove();
+    for (const check of checks) current.group.insertBefore(renderCheck(check), current.excerpt);
+    entryCount += checks.length;
+    ui['feed-count'].textContent = `${entryCount} éclairage${entryCount > 1 ? 's' : ''}`;
+    if (!companion.classList.contains('is-open')) {
+      unreadCount += checks.length; ui.unread.textContent = unreadCount; ui.unread.hidden = false;
+    }
+    if (kind !== 'live' && ui.transcript.value.trim() === text) { ui.transcript.value = ''; updateComposer(); }
+  } catch (error) {
+    current.record.status = 'failed'; current.record.error = error.name === 'AbortError' ? 'Délai de recherche dépassé.' : error.message;
+    current.pending.remove();
+    const failure = node('div', 'result-card failed-search');
+    failure.append(node('span', 'verdict unsure', 'Recherche interrompue'), node('p', 'result-summary', error.name === 'AbortError' ? 'La recherche prend trop de temps. Réessayez avec un extrait plus court.' : error.message));
+    const retry = node('button', 'retry-button', 'Réessayer'); retry.type = 'button';
+    retry.onclick = () => runVerification(text, kind, current); failure.append(retry);
+    current.group.insertBefore(failure, current.excerpt);
+  } finally {
+    clearTimeout(timeout); busy = false; updateStatus(); scheduleLive(); updateArchiveCount();
+  }
+  return true;
+}
+
+function scheduleLive() {
+  clearTimeout(liveTimer);
+  if (!wantedListening || busy || configured !== true || pendingSpeech.trim().length < 10) return;
+  // Flush after a short pause, or after eight seconds of continuous final results.
+  const pause = Math.min(2500, Math.max(0, 8000 - (Date.now() - pendingSince)));
+  const cooldown = Math.max(0, 20000 - (Date.now() - lastRequest));
+  liveTimer = setTimeout(flushLive, Math.max(pause, cooldown));
+  ui['live-queue'].textContent = cooldown > 2500 ? 'Extrait en attente de la prochaine recherche…' : 'L’extrait sera vérifié après une courte pause.';
+}
+async function flushLive() {
+  if (!wantedListening || busy || configured !== true) return;
+  const text = pendingSpeech.trim();
+  if (text.length < 10) return;
+  const transcriptIds = pendingTranscriptIds;
+  pendingSpeech = ''; pendingSince = 0; pendingTranscriptIds = [];
+  ui['live-queue'].textContent = 'Recherche en cours. L’écoute continue.';
+  const accepted = await runVerification(text, 'live', null, transcriptIds);
+  if (!accepted) {
+    pendingSpeech = `${text} ${pendingSpeech}`.trim();
+    pendingTranscriptIds = [...transcriptIds, ...pendingTranscriptIds];
+    if (!pendingSince) pendingSince = Date.now();
+  }
+}
+function stopListening() {
+  if (wantedListening || listening) archive.recordCapture('microphone_stopped');
+  wantedListening = false; listening = false;
+  clearTimeout(liveTimer); clearTimeout(restartTimer);
+  if (recognition) { try { recognition.stop(); } catch { /* Already stopped. */ } }
+  if (!ui['live-preview'].hidden) ui['live-queue'].textContent = 'Écoute en pause. Vous pouvez la reprendre avec la bulle.';
+  updateStatus();
+}
+function startListening() {
+  setPanelOpen(true);
+  if (!recognition) {
+    showError('Ce navigateur ne propose pas la transcription au micro. Utilisez Chrome sur ordinateur ou saisissez le contenu ci-dessous.');
+    ui.transcript.focus(); return;
+  }
+  if (!window.isSecureContext) { showError('Le micro nécessite une connexion HTTPS ou une ouverture sur localhost.'); return; }
+  if (wantedListening) return;
+  ui.error.hidden = true; wantedListening = true; restartCount = 0;
+  ui['live-preview'].hidden = false;
+  try { recognition.start(); updateStatus(); }
+  catch { stopListening(); showError('Le micro n’est pas encore disponible. Réessayez dans un instant.'); }
+}
+if (recognition) {
+  recognition.lang = 'fr-FR'; recognition.continuous = true; recognition.interimResults = true;
+  recognition.onstart = () => {
+    if (!wantedListening) { recognition.stop(); return; }
+    archive.recordCapture('microphone_started'); listening = true; updateStatus(); scheduleLive();
+  };
+  recognition.onresult = event => {
+    if (!wantedListening) return;
+    restartCount = 0;
+    let interim = '';
+    for (let i = event.resultIndex; i < event.results.length; i++) {
+      const text = event.results[i][0].transcript.trim();
+      if (!text) continue;
+      if (event.results[i].isFinal) {
+        pendingTranscriptIds.push(archive.recordTranscript(text)); updateArchiveCount();
+        if (!pendingSince) pendingSince = Date.now();
+        pendingSpeech = `${pendingSpeech} ${text}`.trim();
+        finalPreview = `${finalPreview} ${text}`.trim().slice(-600);
+      } else interim += ` ${text}`;
+    }
+    ui['live-transcript'].textContent = `${finalPreview} ${interim}`.trim() || 'En attente de votre voix…';
+    if (pendingSpeech.length > 18000) {
+      // Preserve the pending excerpt for manual verification rather than dropping speech.
+      stopListening();
+      if (!ui.transcript.value.trim()) { ui.transcript.value = pendingSpeech.slice(0, 20000); updateComposer(); pendingSpeech = ''; pendingSince = 0; pendingTranscriptIds = []; }
+      showError('Un long extrait est en attente. Vérifiez-le avant de reprendre l’écoute.');
+      return;
+    }
+    if (configured === false) ui['live-queue'].textContent = 'Transcription active · recherche de sources non configurée.';
+    scheduleLive();
+  };
+  recognition.onerror = event => {
+    if (event.error === 'no-speech' || (event.error === 'aborted' && !wantedListening)) return;
+    const messages = {
+      'not-allowed': 'Le micro n’a pas été autorisé. Activez-le dans les permissions du navigateur.',
+      'service-not-allowed': 'Le service de transcription est désactivé dans ce navigateur.',
+      'audio-capture': 'Aucun micro disponible. Vérifiez le branchement et l’entrée audio choisie.',
+      'network': 'La transcription a perdu sa connexion. Vous pouvez relancer l’écoute ou saisir un texte.'
+    };
+    stopListening(); showError(messages[event.error] || 'L’écoute a été interrompue. Vous pouvez la relancer.');
+  };
+  recognition.onend = () => {
+    listening = false; updateStatus();
+    if (!wantedListening) return;
+    if (++restartCount > 3) { stopListening(); showError('Le navigateur a arrêté l’écoute. Cliquez sur la bulle pour la reprendre.'); return; }
+    restartTimer = setTimeout(() => {
+      if (!wantedListening) return;
+      try { recognition.start(); } catch { stopListening(); showError('Impossible de reprendre le micro. Cliquez pour réessayer.'); }
+    }, 600);
+  };
+}
+
+ui.bubble.onclick = () => { setPanelOpen(true); wantedListening ? stopListening() : startListening(); };
+ui.microphone.onclick = () => wantedListening ? stopListening() : startListening();
+ui.collapse.onclick = () => setPanelOpen(false);
+ui['dismiss-error'].onclick = () => { ui.error.hidden = true; };
+ui.composer.onsubmit = event => {
+  event.preventDefault();
+  const text = ui.transcript.value.trim();
+  if (text.length < 10) return showError('Ajoutez une phrase d’au moins 10 caractères, un article ou un lien.');
+  runVerification(text, /^https?:\/\/\S+$/i.test(text) ? 'url' : 'text');
+};
+ui.transcript.addEventListener('input', updateComposer);
+ui.transcript.addEventListener('keydown', event => {
+  if (event.key === 'Enter' && (event.ctrlKey || event.metaKey)) { event.preventDefault(); ui.composer.requestSubmit(); }
+});
+ui.example.onclick = () => { ui.transcript.value = 'La Grande Muraille de Chine est visible à l’œil nu depuis la Lune.'; updateComposer(); ui.transcript.focus(); };
+companion.addEventListener('keydown', event => {
+  if (event.key === 'Escape') {
+    event.preventDefault();
+    if (!ui['archive-tray'].hidden) toggleArchive(false); else setPanelOpen(false);
+  }
+});
+document.getElementById('open-assistant').onclick = () => { setPanelOpen(true); if (floatingWindow) floatingWindow.focus(); ui.transcript.focus(); };
+
+function toggleArchive(open) {
+  ui['archive-tray'].hidden = !open; ui['archive-button'].setAttribute('aria-expanded', String(open));
+}
+ui['archive-button'].onclick = () => toggleArchive(ui['archive-tray'].hidden);
+ui['export-json'].onclick = () => { archive.exportJson(); ui['archive-status'].textContent = 'Archive JSON exportée. Elle pourra servir de contexte à une prochaine interview.'; };
+ui['export-html'].onclick = async () => {
+  if (busy) return;
+  stopListening();
+  if (pendingSpeech.trim().length >= 10 && configured === true) {
+    const text = pendingSpeech.trim(), transcriptIds = pendingTranscriptIds;
+    pendingSpeech = ''; pendingSince = 0; pendingTranscriptIds = [];
+    ui['archive-status'].textContent = 'Vérification du dernier extrait avant l’export…';
+    await runVerification(text, 'live', null, transcriptIds);
+  }
+  archive.exportHtml();
+  ui['archive-status'].textContent = 'Compte rendu HTML exporté, avec la transcription et la carte. Conservez aussi le JSON pour les comparaisons futures.';
+};
+ui['import-archive'].onchange = async event => {
+  const file = event.target.files[0]; if (!file) return;
+  try {
+    if (file.size > 5 * 1024 * 1024) throw new Error('Choisissez une archive de moins de 5 Mo.');
+    const count = archive.importArchive(JSON.parse(await file.text()));
+    ui['past-count'].textContent = `${archive.session.references.length} propos antérieurs disponibles. Les 12 derniers seront proposés comme contexte aux prochaines recherches.`;
+    ui['archive-status'].textContent = `${count} propos importé${count > 1 ? 's' : ''}. Les connexions apparaîtront au fil des prochaines vérifications.`;
+  } catch (error) { ui['archive-status'].textContent = error instanceof SyntaxError ? 'Ce fichier n’est pas une archive JSON valide.' : error.message; }
+  event.target.value = '';
+};
+
+if (!window.documentPictureInPicture) {
+  ui.detach.disabled = true;
+  ui.detach.title = 'La fenêtre flottante nécessite Chrome sur ordinateur. Le volet reste disponible ici.';
+} else {
+  ui.detach.onclick = async () => {
+    if (floatingWindow) { floatingWindow.close(); return; }
+    try {
+      floatingSize = {width: Math.min(460, Math.max(360, Math.round(screen.availWidth / 4))), height: Math.min(780, Math.max(480, screen.availHeight - 100))};
+      floatingWindow = await window.documentPictureInPicture.requestWindow(floatingSize);
+      const pip = floatingWindow;
+      pip.document.title = 'Interprete'; pip.document.documentElement.lang = 'fr'; pip.document.body.className = 'pip-body';
+      const stylesheet = pip.document.createElement('link'); stylesheet.rel = 'stylesheet'; stylesheet.href = new URL('/style.css', window.location.href).href;
+      pip.document.head.append(stylesheet);
+      pip.document.body.append(document.querySelector('.icon-library').cloneNode(true), companion);
+      document.body.classList.add('is-detached'); document.getElementById('detached-message').hidden = false;
+      ui.detach.setAttribute('aria-label', 'Ramener Interprete dans l’onglet'); ui.detach.title = 'Ramener dans l’onglet';
+      setPanelOpen(true);
+      pip.addEventListener('pagehide', () => {
+        stopListening();
+        document.body.append(companion); floatingWindow = null;
+        document.body.classList.remove('is-detached'); document.getElementById('detached-message').hidden = true;
+        ui.detach.setAttribute('aria-label', 'Ouvrir en fenêtre flottante'); ui.detach.title = 'Rester au-dessus des autres applications';
+        setPanelOpen(true);
+      }, {once: true});
+    } catch {
+      if (floatingWindow) floatingWindow.close();
+      floatingWindow = null;
+      showError('La fenêtre flottante est indisponible. Essayez dans Chrome sur ordinateur ; le volet reste accessible ici.');
+    }
+  };
+}
+window.addEventListener('pagehide', stopListening);
+updateComposer();
+refreshConfiguration().then(scheduleLive);
