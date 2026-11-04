@@ -1,0 +1,65 @@
+name: Linux executable
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - 'desktop/**'
+      - 'static/**'
+      - 'server.py'
+      - 'desktop_backend.py'
+      - 'scripts/build_backend.py'
+      - 'scripts/test_desktop.cjs'
+      - 'tests/**'
+      - 'package*.json'
+      - 'requirements-build.txt'
+      - 'docs/assets/icon.png'
+      - '.github/workflows/build-linux.yml'
+  pull_request:
+    branches: [main]
+permissions:
+  contents: read
+jobs:
+  build:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 20
+    env:
+      CSC_IDENTITY_AUTO_DISCOVERY: 'false'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+      - name: Build tools
+        run: |
+          python -m pip install -r requirements-build.txt
+          npm ci --no-fund --no-audit
+          npx --no install-electron
+      - name: Test engine and audio
+        run: |
+          python -m unittest discover -s tests -v
+          npm run test:desktop
+      - name: Build standalone Python service
+        run: python scripts/build_backend.py
+      - name: Test native desktop
+        run: xvfb-run -a npm run test:desktop:smoke
+      - name: Package Linux executables
+        run: npm run dist:linux
+      - name: Test packaged application
+        run: xvfb-run -a env INTERPRETE_DESKTOP_EXECUTABLE="$PWD/dist/linux-unpacked/interprete" npm run test:desktop:smoke
+      - name: Checksums
+        working-directory: dist
+        run: sha256sum *.AppImage *.tar.gz > SHA256SUMS
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Interprete-Linux-x86_64
+          path: |
+            dist/*.AppImage
+            dist/*.tar.gz
+            dist/SHA256SUMS
+          if-no-files-found: error
+          retention-days: 30

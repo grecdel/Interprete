@@ -1,0 +1,69 @@
+{
+  "name": "interprete",
+  "version": "0.2.0",
+  "private": true,
+  "description": "Assistant de vérification journalistique de bureau",
+  "author": "Grec Del",
+  "main": "desktop/main.cjs",
+  "scripts": {
+    "desktop": "electron .",
+    "test:desktop": "node tests/desktop.test.cjs",
+    "pack": "electron-builder --dir --publish never",
+    "dist:linux": "electron-builder --linux AppImage tar.gz --publish never",
+    "dist:windows": "electron-builder --win portable --x64 --publish never",
+    "test:desktop:smoke": "node scripts/test_desktop.cjs"
+  },
+  "devDependencies": {
+    "electron": "45.2.2",
+    "electron-builder": "26.18.0",
+    "playwright": "1.62.0"
+  },
+  "build": {
+    "appId": "fr.interprete.assistant",
+    "productName": "Interprete",
+    "directories": {
+      "output": "dist"
+    },
+    "files": [
+      "desktop/**",
+      "package.json",
+      "docs/assets/icon.png"
+    ],
+    "extraResources": [
+      {
+        "from": "build/backend",
+        "to": "backend",
+        "filter": [
+          "interprete-backend*"
+        ]
+      }
+    ],
+    "artifactName": "Interprete-${version}-${os}-${arch}.${ext}",
+    "linux": {
+      "target": [
+        "AppImage",
+        "tar.gz"
+      ],
+      "category": "Utility",
+      "icon": "docs/assets/icon.png",
+      "syncDesktopName": true
+    },
+    "win": {
+      "target": [
+        "portable"
+      ],
+      "icon": "docs/assets/icon.ico",
+      "signAndEditExecutable": false
+    },
+    "mac": {
+      "target": [
+        "zip"
+      ],
+      "icon": "docs/assets/icon.png",
+      "extendInfo": {
+        "NSMicrophoneUsageDescription": "Interprete transcrit les propos que vous choisissez de faire vérifier."
+      }
+    }
+  },
+  "desktopName": "Interprete.desktop"
+}

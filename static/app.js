@@ -4,6 +4,7 @@ const companion = document.getElementById('companion');
 // Keep references when the companion moves into its floating window.
 const ui = Object.fromEntries([...companion.querySelectorAll('[id]')].map(node => [node.id, node]));
 const archive = window.InterpreteArchive;
+const desktop = window.interpreteDesktop;
 let configured = null;
 let busy = false;
 let wantedListening = false;
@@ -21,7 +22,11 @@ let unreadCount = 0;
 let floatingWindow = null;
 let floatingSize = {width: 380, height: 720};
 const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-const recognition = SpeechRecognition ? new SpeechRecognition() : null;
+const recognition = !desktop && SpeechRecognition ? new SpeechRecognition() : null;
+let microphoneCapture;
+let captureCompletion = Promise.resolve();
+let endingSession = false;
+let microphoneEpoch = 0;
 const verdictStyles = {'Confirmé': 'confirmed', 'Contredit': 'contradicted', 'À nuancer': 'nuanced', 'Informations insuffisantes': 'unsure'};
 
 function node(tag, className, text) {
@@ -50,22 +55,28 @@ function updateStatus() {
   ui.microphone.querySelector('use').setAttribute('href', wantedListening ? '#i-pause' : '#i-mic');
   ui.bubble.setAttribute('aria-label', wantedListening ? 'Mettre l’écoute en pause' : 'Écouter un reportage et ouvrir Interprete');
   ui['bubble-label'].textContent = wantedListening ? 'Cliquer pour mettre en pause' : busy ? 'Vérification en cours…' : 'Un clic pour écouter';
-  if (!recognition) {
+  if (!recognition && !desktop) {
     ui['listen-title'].textContent = 'La saisie reste à votre écoute';
     ui['listen-subtitle'].textContent = 'Pour le micro, utilisez Chrome sur ordinateur.';
     ui.bubble.setAttribute('aria-label', 'Ouvrir Interprete et saisir un contenu');
     ui['bubble-label'].textContent = 'Un clic pour ouvrir';
   }
   ui.verify.disabled = busy || ui.transcript.value.trim().length < 10;
-  ui['export-html'].disabled = busy;
+  ui['export-html'].disabled = busy || endingSession;
 }
 function updateArchiveCount() {
   const count = archive.session.transcript.length;
   ui['archive-count'].textContent = `${count} propos transcrit${count > 1 ? 's' : ''}`;
+  if (count || archive.session.submissions.length) desktop?.setUnsaved(true);
+}
+async function apiFetch(path, options = {}) {
+  if (!desktop) return fetch(path, options);
+  const result = await desktop.request(path, options.body ? JSON.parse(options.body) : undefined);
+  return {ok: result.ok, status: result.status, json: async () => result.body};
 }
 async function refreshConfiguration() {
   try {
-    const response = await fetch('/api/status', {cache: 'no-store'});
+    const response = await apiFetch('/api/status', {cache: 'no-store'});
     if (!response.ok) throw new Error();
     configured = Boolean((await response.json()).configured);
     ui.configuration.hidden = configured;
@@ -81,6 +92,7 @@ function setPanelOpen(open) {
   companion.classList.toggle('is-open', open);
   ui['assistant-panel'].hidden = !open;
   ui.bubble.setAttribute('aria-expanded', String(open));
+  desktop?.setPanelOpen(open);
   if (open) {
     unreadCount = 0; ui.unread.hidden = true;
     if (floatingWindow) {
@@ -145,7 +157,7 @@ function renderCheck(check) {
     followUp.append(node('span', 'follow-up-label', 'POUR REBONDIR · PISTE DE RELANCE'), node('p', '', cleanText(check.follow_up)));
     const copy = node('button', 'copy-question', 'Copier la question'); copy.type = 'button';
     copy.onclick = async () => {
-      try { await navigator.clipboard.writeText(check.follow_up); copy.textContent = 'Question copiée'; }
+      try { if (desktop) await desktop.copyText(check.follow_up); else await navigator.clipboard.writeText(check.follow_up); copy.textContent = 'Question copiée'; }
       catch { showError('La copie est indisponible. Vous pouvez sélectionner la question directement.'); }
     };
     followUp.append(copy); card.append(followUp);
@@ -215,7 +227,7 @@ async function runVerification(text, kind, entry = null, transcriptIds = []) {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), 100000);
   try {
-    const response = await fetch('/api/verify', {method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({transcript: text, kind: kind === 'live' ? 'live' : 'auto', context}), signal: controller.signal});
+    const response = await apiFetch('/api/verify', {method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({transcript: text, kind: kind === 'live' ? 'live' : 'auto', context}), signal: controller.signal});
     const result = await response.json();
     if (!response.ok) throw new Error(result.error || 'La recherche a échoué.');
     const checks = archive.completeSubmission(current.record, result);
@@ -266,15 +278,39 @@ async function flushLive() {
   }
 }
 function stopListening() {
+  microphoneEpoch++;
   if (wantedListening || listening) archive.recordCapture('microphone_stopped');
   wantedListening = false; listening = false;
   clearTimeout(liveTimer); clearTimeout(restartTimer);
   if (recognition) { try { recognition.stop(); } catch { /* Already stopped. */ } }
+  if (microphoneCapture) captureCompletion = microphoneCapture.stop();
   if (!ui['live-preview'].hidden) ui['live-queue'].textContent = 'Écoute en pause. Vous pouvez la reprendre avec la bulle.';
+  if (desktop) ui['live-preview'].hidden = true;
   updateStatus();
+  return captureCompletion;
 }
-function startListening() {
+async function startListening() {
   setPanelOpen(true);
+  if (desktop) {
+    if (wantedListening || endingSession) return;
+    if (!configured && !await refreshConfiguration()) { toggleSettings(true); return; }
+    wantedListening = true; ui.error.hidden = true; updateStatus();
+    ui['live-preview'].hidden = false;
+    ui['live-queue'].textContent = 'Transcription par extraits de 12 secondes · audio envoyé à OpenAI.';
+    const epoch = ++microphoneEpoch;
+    const capture = new window.InterpreteMicrophone({
+      transcribe: (audio, mimeType) => desktop.transcribe(audio, mimeType),
+      onText: text => { acceptSpeech(text); ui['live-transcript'].textContent = finalPreview; scheduleLive(); },
+      onError: message => { archive.recordCapture('transcription_interrupted'); if (epoch === microphoneEpoch) stopListening(); showError(message); }
+    });
+    microphoneCapture = capture;
+    try {
+      await capture.start();
+      if (!wantedListening || epoch !== microphoneEpoch) { capture.stop(); return; }
+      listening = true; archive.recordCapture('microphone_started'); updateStatus();
+    } catch { stopListening(); showError('Le micro est indisponible ou son accès a été refusé. Vérifiez les permissions du système.'); }
+    return;
+  }
   if (!recognition) {
     showError('Ce navigateur ne propose pas la transcription au micro. Utilisez Chrome sur ordinateur ou saisissez le contenu ci-dessous.');
     ui.transcript.focus(); return;
@@ -285,6 +321,12 @@ function startListening() {
   ui['live-preview'].hidden = false;
   try { recognition.start(); updateStatus(); }
   catch { stopListening(); showError('Le micro n’est pas encore disponible. Réessayez dans un instant.'); }
+}
+function acceptSpeech(text) {
+  pendingTranscriptIds.push(archive.recordTranscript(text)); updateArchiveCount();
+  if (!pendingSince) pendingSince = Date.now();
+  pendingSpeech = `${pendingSpeech} ${text}`.trim();
+  finalPreview = `${finalPreview} ${text}`.trim().slice(-600);
 }
 if (recognition) {
   recognition.lang = 'fr-FR'; recognition.continuous = true; recognition.interimResults = true;
@@ -300,10 +342,7 @@ if (recognition) {
       const text = event.results[i][0].transcript.trim();
       if (!text) continue;
       if (event.results[i].isFinal) {
-        pendingTranscriptIds.push(archive.recordTranscript(text)); updateArchiveCount();
-        if (!pendingSince) pendingSince = Date.now();
-        pendingSpeech = `${pendingSpeech} ${text}`.trim();
-        finalPreview = `${finalPreview} ${text}`.trim().slice(-600);
+        acceptSpeech(text);
       } else interim += ` ${text}`;
     }
     ui['live-transcript'].textContent = `${finalPreview} ${interim}`.trim() || 'En attente de votre voix…';
@@ -356,7 +395,8 @@ ui.example.onclick = () => { ui.transcript.value = 'La Grande Muraille de Chine 
 companion.addEventListener('keydown', event => {
   if (event.key === 'Escape') {
     event.preventDefault();
-    if (!ui['archive-tray'].hidden) toggleArchive(false); else setPanelOpen(false);
+    if (!ui['settings-tray'].hidden) toggleSettings(false);
+    else if (!ui['archive-tray'].hidden) toggleArchive(false); else setPanelOpen(false);
   }
 });
 document.getElementById('open-assistant').onclick = () => { setPanelOpen(true); if (floatingWindow) floatingWindow.focus(); ui.transcript.focus(); };
@@ -365,18 +405,27 @@ function toggleArchive(open) {
   ui['archive-tray'].hidden = !open; ui['archive-button'].setAttribute('aria-expanded', String(open));
 }
 ui['archive-button'].onclick = () => toggleArchive(ui['archive-tray'].hidden);
-ui['export-json'].onclick = () => { archive.exportJson(); ui['archive-status'].textContent = 'Archive JSON exportée. Elle pourra servir de contexte à une prochaine interview.'; };
+ui['export-json'].onclick = async () => {
+  try { const saved = await archive.exportJson(); if (saved !== false) ui['archive-status'].textContent = 'Archive JSON exportée. Elle pourra servir de contexte à une prochaine interview.'; }
+  catch { ui['archive-status'].textContent = 'L’archive n’a pas pu être enregistrée. Réessayez.'; }
+};
 ui['export-html'].onclick = async () => {
-  if (busy) return;
-  stopListening();
+  if (busy || endingSession) return;
+  endingSession = true; updateStatus();
+  ui['archive-status'].textContent = 'Fin de la transcription avant l’export…';
+  await stopListening();
   if (pendingSpeech.trim().length >= 10 && configured === true) {
     const text = pendingSpeech.trim(), transcriptIds = pendingTranscriptIds;
     pendingSpeech = ''; pendingSince = 0; pendingTranscriptIds = [];
     ui['archive-status'].textContent = 'Vérification du dernier extrait avant l’export…';
     await runVerification(text, 'live', null, transcriptIds);
   }
-  archive.exportHtml();
-  ui['archive-status'].textContent = 'Compte rendu HTML exporté, avec la transcription et la carte. Conservez aussi le JSON pour les comparaisons futures.';
+  try {
+    const saved = await archive.exportHtml();
+    if (saved !== false) { ui['archive-status'].textContent = 'Compte rendu HTML exporté, avec la transcription et la carte. Conservez aussi le JSON pour les comparaisons futures.'; desktop?.setUnsaved(false); }
+    else ui['archive-status'].textContent = 'Enregistrement annulé. La session est toujours disponible.';
+  } catch { ui['archive-status'].textContent = 'L’archive n’a pas pu être enregistrée. La session reste disponible.'; }
+  finally { endingSession = false; updateStatus(); }
 };
 ui['import-archive'].onchange = async event => {
   const file = event.target.files[0]; if (!file) return;
@@ -389,7 +438,32 @@ ui['import-archive'].onchange = async event => {
   event.target.value = '';
 };
 
-if (!window.documentPictureInPicture) {
+function toggleSettings(open) {
+  ui['settings-tray'].hidden = !open; ui['settings-button'].setAttribute('aria-expanded', String(open));
+  if (open) { toggleArchive(false); ui['api-key'].focus(); }
+}
+if (desktop) {
+  document.documentElement.classList.add('desktop-root');
+  document.body.classList.add('desktop-mode');
+  ui['settings-button'].hidden = false; ui['quit-desktop'].hidden = false;
+  ui.detach.hidden = true;
+  ui['settings-button'].onclick = () => toggleSettings(ui['settings-tray'].hidden);
+  ui['quit-desktop'].onclick = () => desktop.quit();
+  desktop.onOpen(() => setPanelOpen(true));
+  desktop.settings().then(settings => {
+    ui['remember-key'].disabled = !settings.canRemember;
+    if (!settings.canRemember) ui['storage-help'].textContent = 'Aucun coffre sécurisé disponible : la clé restera uniquement en mémoire.';
+  });
+  ui['key-form'].onsubmit = async event => {
+    event.preventDefault(); ui['save-key'].disabled = true;
+    try {
+      await desktop.saveKey(ui['api-key'].value.trim(), ui['remember-key'].checked);
+      ui['api-key'].value = ''; ui['settings-status'].textContent = 'Clé configurée. La prochaine recherche vérifiera l’accès au service.';
+      await refreshConfiguration();
+    } catch (error) { ui['settings-status'].textContent = error.message; }
+    finally { ui['save-key'].disabled = false; }
+  };
+} else if (!window.documentPictureInPicture) {
   ui.detach.disabled = true;
   ui.detach.title = 'La fenêtre flottante nécessite Chrome sur ordinateur. Le volet reste disponible ici.';
 } else {
@@ -422,4 +496,4 @@ if (!window.documentPictureInPicture) {
 }
 window.addEventListener('pagehide', stopListening);
 updateComposer();
-refreshConfiguration().then(scheduleLive);
+refreshConfiguration().then(() => { scheduleLive(); if (desktop && !configured) toggleSettings(true); });

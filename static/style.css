@@ -119,3 +119,26 @@ textarea { display: block; resize: none; border: 0; outline: none; color: #58536
 }
 @media (max-height: 640px) { .assistant-panel { bottom: 78px; }.bubble-dock { bottom: 13px; }.bubble { width: 48px; height: 48px; }.panel-header { padding-top: 13px; padding-bottom: 12px; }.live-section { padding-bottom: 10px; }.listen-button { padding-top: 8px; padding-bottom: 8px; }.listen-copy>span { display: none; }.feed-heading { padding-top: 12px; }.composer { padding-top: 7px; }.composer-hint { display: none; }.help { padding-bottom: 10px; }.empty-feed { padding-top: 10px; padding-bottom: 16px; }.empty-symbol { display: none; }.live-preview p { max-height: 30px; } }
 @media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation: none !important; transition: none !important; scroll-behavior: auto !important; } }
+
+/* The packaged application owns a real transparent, always-on-top window. */
+.desktop-grip { display: none; }
+.desktop-root, .desktop-mode { background: transparent; overflow: hidden; }
+.desktop-mode .backdrop { display: none; }
+.desktop-mode .assistant-panel { inset: 8px 8px 84px; width: auto; border-radius: 20px; box-shadow: 0 4px 18px #24213e0a; }
+.desktop-mode .panel-header { -webkit-app-region: drag; padding-top: 18px; }
+.desktop-mode button, .desktop-mode input, .desktop-mode textarea, .desktop-mode a, .desktop-mode summary { -webkit-app-region: no-drag; }
+.desktop-mode .bubble-dock { right: 16px; bottom: 16px; }
+.desktop-mode .bubble-label { display: none; }
+.desktop-mode .companion:not(.is-open) .desktop-grip { display: block; position: fixed; top: 6px; right: 32px; width: 26px; height: 5px; border-radius: 3px; background: #c4bad7a0; -webkit-app-region: drag; }
+.desktop-mode .header-actions { gap: 1px; }.desktop-mode .panel-identity p { font-size: 10px; }
+.desktop-mode .quit-desktop { display: block; background: none; border: 0; color: #8b8098; padding: 0 0 12px; margin: 0; font-size: 9px; flex-shrink: 0; }
+.desktop-mode .help { padding-bottom: 7px; }.desktop-mode .help>div { max-height: 100px; }
+.settings-tray label { display: block; color: #7c6d8a; font-size: 11px; line-height: 1.7; margin-bottom: 7px; }
+.settings-tray input[type=password] { border: 1px solid #d5c9e2; border-radius: 7px; background: #faf8fd; color: #72617e; padding: 11px; width: 100%; outline: none; font-size: 14px; }
+.settings-tray input[type=password]:focus { border-color: #a892bc; box-shadow: 0 0 0 2px #e8def3; }
+.settings-tray .remember-key { display: flex; align-items: flex-start; gap: 7px; margin-top: 13px; font-size: 11px; }
+.settings-tray .remember-key input { accent-color: #9981b2; margin-top: 4px; }
+.settings-tray form p { font-size: 10px; line-height: 1.7; color: #9c8aa8; }
+.settings-tray button[type=submit] { background: #8d77a5; color: white; border: 0; border-radius: 7px; width: 100%; padding: 11px; font-size: 12px; margin: 8px 0; }
+.settings-tray button:disabled { opacity: .5; }.settings-tray>a { font-size: 10px; color: #9d83b3; }
+@media(max-height:540px) { .desktop-mode .assistant-panel { bottom: 78px; }.desktop-mode .live-section { padding-bottom: 8px; }.desktop-mode .feed { min-height: 50px; }.desktop-mode .panel-header { padding-bottom: 12px; }.desktop-mode .quit-desktop { padding-bottom: 7px; } }

@@ -3,6 +3,7 @@ import ipaddress
 import json
 import os
 import re
+import secrets
 import urllib.error
 import urllib.parse
 import urllib.request
@@ -72,6 +73,32 @@ RELATIONS = {'contradiction_potentielle', 'concordance', 'nuance', 'contexte'}
 
 def api_key():
     return os.environ.get('INTERPRETE_API_KEY') or os.environ.get('OPENAI_API_KEY')
+
+
+def transcribe(audio, mime_type, opener=urllib.request.urlopen):
+    key = api_key()
+    if not key:
+        raise ValueError('Ajoutez votre clé API dans les réglages d’Interprete.')
+    formats = {'audio/webm': 'webm', 'audio/ogg': 'ogg', 'audio/mp4': 'm4a', 'audio/wav': 'wav'}
+    content_type = mime_type.split(';', 1)[0].strip()
+    if content_type not in formats or not 0 < len(audio) <= 8 * 1024 * 1024:
+        raise ValueError('Cet extrait audio est vide, trop volumineux ou dans un format non pris en charge.')
+    boundary = 'Interprete' + secrets.token_hex(16)
+    fields = {'model': os.environ.get('INTERPRETE_TRANSCRIPTION_MODEL', 'gpt-4o-mini-transcribe'),
+              'language': 'fr', 'response_format': 'json'}
+    parts = []
+    for name, value in fields.items():
+        parts.append(f'--{boundary}\r\nContent-Disposition: form-data; name="{name}"\r\n\r\n{value}\r\n'.encode())
+    parts.append(f'--{boundary}\r\nContent-Disposition: form-data; name="file"; filename="extrait.{formats[content_type]}"\r\nContent-Type: {content_type}\r\n\r\n'.encode())
+    parts.extend([audio, f'\r\n--{boundary}--\r\n'.encode()])
+    request = urllib.request.Request('https://api.openai.com/v1/audio/transcriptions', data=b''.join(parts),
+                                    headers={'Authorization': f'Bearer {key}',
+                                             'Content-Type': f'multipart/form-data; boundary={boundary}'})
+    with opener(request, timeout=60) as response:
+        result = json.load(response)
+    if not isinstance(result.get('text'), str):
+        raise ValueError('Le service n’a pas renvoyé de transcription exploitable.')
+    return {'text': result['text'][:MAX_TEXT]}
 
 
 def normalize_context(context):
@@ -263,6 +290,10 @@ def verify(transcript, opener=urllib.request.urlopen, kind='auto', context=None)
 
 
 class Handler(BaseHTTPRequestHandler):
+    def authorized(self):
+        expected = os.environ.get('INTERPRETE_DESKTOP_TOKEN')
+        return not expected or secrets.compare_digest(self.headers.get('X-Interprete-Token', '').encode('utf-8'), expected.encode('utf-8'))
+
     def send_json(self, status, value):
         data = json.dumps(value, ensure_ascii=False).encode()
         self.send_response(status)
@@ -274,8 +305,11 @@ class Handler(BaseHTTPRequestHandler):
 
     def do_GET(self):
         if self.path == '/api/status':
+            if not self.authorized():
+                return self.send_json(403, {'error': 'Accès réservé à l’application Interprete.'})
             return self.send_json(200, {'configured': bool(api_key())})
-        name = {'/': 'index.html', '/app.js': 'app.js', '/archive.js': 'archive.js', '/style.css': 'style.css'}.get(self.path)
+        name = {'/': 'index.html', '/app.js': 'app.js', '/archive.js': 'archive.js',
+                '/capture.js': 'capture.js', '/style.css': 'style.css'}.get(self.path)
         if not name:
             return self.send_json(404, {'error': 'Page introuvable'})
         data = (ROOT / 'static' / name).read_bytes()
@@ -283,18 +317,36 @@ class Handler(BaseHTTPRequestHandler):
         self.send_header('Content-Type', {'html': 'text/html; charset=utf-8', 'js': 'text/javascript; charset=utf-8', 'css': 'text/css; charset=utf-8'}[name.split('.')[-1]])
         self.send_header('Content-Length', str(len(data)))
         self.send_header('X-Content-Type-Options', 'nosniff')
+        self.send_header('Content-Security-Policy', "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self'; media-src 'self' blob:; object-src 'none'; frame-ancestors 'none'")
         self.end_headers()
         self.wfile.write(data)
 
     def do_POST(self):
-        if self.path != '/api/verify':
+        if self.path not in ('/api/verify', '/api/transcribe', '/api/desktop/key'):
             return self.send_json(404, {'error': 'Route introuvable'})
+        if not self.authorized():
+            return self.send_json(403, {'error': 'Accès réservé à l’application Interprete.'})
         # Reject cross-origin browser requests to this local service.
         origin = self.headers.get('Origin')
         if origin and origin not in ('http://' + self.headers.get('Host', ''), 'https://' + self.headers.get('Host', '')):
             return self.send_json(403, {'error': 'Origine refusée'})
         try:
             length = int(self.headers.get('Content-Length', '0'))
+            if self.path == '/api/transcribe':
+                if not 0 < length <= 8 * 1024 * 1024:
+                    return self.send_json(400, {'error': 'Extrait audio trop volumineux ou vide.'})
+                return self.send_json(200, transcribe(self.rfile.read(length), self.headers.get('Content-Type', '')))
+            if self.path == '/api/desktop/key':
+                if not os.environ.get('INTERPRETE_DESKTOP_TOKEN'):
+                    return self.send_json(403, {'error': 'Ce réglage est réservé à l’application de bureau.'})
+                if not 0 < length <= 4096:
+                    return self.send_json(400, {'error': 'Clé invalide.'})
+                value = json.loads(self.rfile.read(length))
+                key = value.get('key') if isinstance(value, dict) else None
+                if not isinstance(key, str) or not 16 <= len(key.strip()) <= 1024 or any(c.isspace() for c in key.strip()):
+                    return self.send_json(400, {'error': 'Saisissez la clé seule, sans espaces.'})
+                os.environ['INTERPRETE_API_KEY'] = key.strip()
+                return self.send_json(200, {'configured': True})
             if not 0 < length <= 260000:
                 return self.send_json(400, {'error': 'Extrait trop volumineux ou vide.'})
             value = json.loads(self.rfile.read(length))
