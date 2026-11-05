@@ -37,6 +37,7 @@ public final class AssistantService extends Service {
     private final Handler main = new Handler(Looper.getMainLooper());
     private String startRequest;
     private volatile boolean destroyed;
+    @android.annotation.SuppressLint("AppCompatCustomView") // Platform Activity/theme; AppCompat is only a transitive OCR dependency.
     private static final class BubbleView extends ImageView {
         BubbleView(android.content.Context context) { super(context); }
         @Override public boolean performClick() { super.performClick(); return true; }
