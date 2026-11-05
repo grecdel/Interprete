@@ -25,7 +25,9 @@ args.output_dir.mkdir(parents=True, exist_ok=True)
 output = args.output_dir / f'Interprete-{version}-android.apk'
 jar = args.input_dir / 'apksigner.jar'
 source = args.input_dir / f'Interprete-{version}-unsigned.apk'
-subprocess.run(['java', '-jar', str(jar), 'sign', '--ks', str(store), '--ks-key-alias', 'interprete-release', '--ks-pass', 'file:' + str(password), '--key-pass', 'file:' + str(password), '--min-sdk-version', '26', '--v4-signing-enabled', 'false', '--out', str(output), str(source)], check=True)
+# PKCS12 uses the store password for the private key. Passing the same file twice
+# would consume two lines in apksigner's password reader.
+subprocess.run(['java', '-jar', str(jar), 'sign', '--ks', str(store), '--ks-key-alias', 'interprete-release', '--ks-pass', 'file:' + str(password), '--min-sdk-version', '26', '--v4-signing-enabled', 'false', '--out', str(output), str(source)], check=True)
 verification = subprocess.run(['java', '-jar', str(jar), 'verify', '--verbose', '--print-certs', str(output)], check=True, capture_output=True, text=True).stdout
 fingerprint = hashlib.sha256((root / 'android/signing-certificate.der').read_bytes()).hexdigest()
 if not re.search(r'certificate SHA-256 digest:\s*' + fingerprint, verification, re.I):
