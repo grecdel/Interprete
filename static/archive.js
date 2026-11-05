@@ -100,7 +100,7 @@ window.InterpreteArchive = (() => {
     };
     function audioFor(container, identity) {
       if(data.audio_directory!=='audio/' || !/^clip_[0-9a-f-]{36}$/.test(identity || '') || !(data.audio || []).some(clip=>clip.id===identity))return;
-      const player=element('audio');player.controls=true;player.preload='none';player.src='audio/'+identity+'.wav';player.setAttribute('aria-label','Réécouter l’extrait original');container.append(player);
+      const player=element('audio');player.controls=true;player.preload='none';player.src='audio/'+identity+'.wav';player.setAttribute('aria-label','Réécouter l’extrait original');player.onplay=()=>{stopMusic();document.querySelectorAll('audio').forEach(other=>{if(other!==player)other.pause();});};container.append(player);
     }
     if(data.audio_directory==='audio/' && data.audio?.length) {
       const section=element('section');section.append(element('h2','','Les extraits audio originaux'));
@@ -187,7 +187,7 @@ window.InterpreteArchive = (() => {
 
     const nodes = [], edges = [], sourceNodes = new Map();
     const clip = (value, length = 90) => value.length > length ? `${value.slice(0, length - 1)}…` : value;
-    for (const [index, entry] of data.submissions.entries()) nodes.push({id: `quote_${entry.id}`, x: 150, y: 90 + index * 140, label: clip(entry.text), searchText:entry.text, category: 'Propos d’origine', href: `#${entry.id}`, kind: 'quote', audio_id:(data.transcript||[]).find(fragment=>(entry.transcript_ids||[]).includes(fragment.id))?.audio_ref?.id});
+    for (const [index, entry] of data.submissions.entries()) nodes.push({id: `quote_${entry.id}`, x: 150, y: 90 + index * 140, label: clip(entry.text), searchText:entry.text, category: 'Propos d’origine', href: `#${entry.id}`, kind: 'quote', audio_ids:(data.transcript||[]).filter(fragment=>(entry.transcript_ids||[]).includes(fragment.id)).map(fragment=>fragment.audio_ref?.id).filter(Boolean)});
     for (const [index, claim] of local.entries()) {
       nodes.push({id: claim.id, x: 465, y: 90 + index * 140, label: clip(claim.claim), searchText:[claim.claim,claim.summary,claim.reasoning].join(' '), category: claim.verdict || 'À examiner', href: `#${claim.id}`, kind: 'claim'});
       edges.push({from: `quote_${claim.entry.id}`, to: claim.id, label: 'Propos examiné', kind: 'quote'});
@@ -250,7 +250,7 @@ window.InterpreteArchive = (() => {
         const item = positions.get(selected); const a = element('a', '', item.label); a.href = item.href;
         if (item.kind === 'source') { a.target = '_blank'; a.rel = 'noopener noreferrer'; }
         $('map-selection').append(a);
-        if(item.audio_id)audioFor($('map-selection'),item.audio_id);
+        for(const identity of item.audio_ids||[])audioFor($('map-selection'),identity);
         if (item.kind === 'evidence' && item.searchText) $('map-selection').append(element('p', '', item.searchText.slice(0,2000)));
         for (const edge of visibleEdges.filter(edge => edge.description)) $('map-selection').append(element('p', '', `${edge.label} : ${edge.description}`));
       } else if (conflictsOnly && !visibleEdges.length) $('map-selection').append(element('p', '', 'Aucune incohérence potentielle n’a été signalée dans cette session. Cela ne démontre pas que tous les propos sont cohérents.'));
@@ -284,6 +284,7 @@ window.InterpreteArchive = (() => {
       if (audio) { stopMusic(); return; }
       try {
         const Audio = window.AudioContext || window.webkitAudioContext;
+        document.querySelectorAll('audio').forEach(player=>player.pause());
         audio = new Audio(); const startedAudio = audio; await audio.resume();
         if (audio !== startedAudio || document.hidden) { if (audio === startedAudio) stopMusic(); return; }
         let beat = 0;

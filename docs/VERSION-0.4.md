@@ -2,7 +2,7 @@
 
 ## Accès aux documents et recherches
 
-Le dossier local ouvre les PDF avec PDF.js et extrait leurs textes, avec des repères de page. Il rend un aperçu de la première page. L’OCR d’images PNG/JPEG/WebP utilise Tesseract et les modèles français/anglais embarqués : aucun document n’est envoyé à un fournisseur OCR. Un texte extrait reste à comparer à l’original. Limites : 8 Mio par fichier, 50 pages / 200 000 caractères par PDF. Les scans PDF sans couche texte nécessitent encore une conversion des pages en images.
+Le dossier local ouvre les PDF avec PDF.js et extrait leurs textes, avec des repères de page. Il rend un aperçu de la première page. L’OCR d’images PNG/JPEG/WebP utilise ML Kit embarqué sur Android et Tesseract avec les modèles français/anglais embarqués sur bureau/web : aucun document n’est envoyé à un fournisseur OCR. Un texte extrait reste à comparer à l’original. Limites : 8 Mio par fichier, 50 pages / 200 000 caractères par PDF. Les scans PDF sans couche texte nécessitent encore une conversion des pages en images.
 
 Crossref, data.gouv.fr et l’Annuaire des entreprises sont interrogés par leurs API publiques depuis le serveur local sur bureau/web et directement depuis le téléphone Android. La requête est envoyée au fournisseur choisi au clic. Aucun fichier du dossier n’est envoyé automatiquement. Les résultats sont limités à cinq notices, datées et enregistrables dans le dossier. Le cache de cinq minutes du serveur et de l’interface conserve la date de la consultation initiale ; il ne rend pas les résultats actuels par magie.
 
@@ -29,7 +29,9 @@ Le glossaire local explique une quinzaine de termes économiques et statistiques
 ## Bibliothèques embarquées
 
 - PDF.js / pdfjs-dist 6.5.438, Apache-2.0, licence et fontes dans `static/vendor/pdf`.
-- Tesseract.js 7.0.0 et son moteur, Apache-2.0, licences dans `static/vendor/ocr`.
+- Tesseract.js 6.0.1 et son moteur, Apache-2.0, licences dans `static/vendor/ocr`.
 - tessdata_fast 4.1.0, français et anglais, Apache-2.0 ; sources et empreintes dans `static/vendor/ocr/lang/models.json`.
 
 Les dépendances npm sont fixées dans le lockfile. Les moteurs, workers et modèles sont distribués localement ; aucun CDN n’est nécessaire au traitement des documents.
+
+- OCR Android : ML Kit Text Recognition Latin 16.0.1, modèle embarqué, sans envoi de l’image à un service OCR distant.

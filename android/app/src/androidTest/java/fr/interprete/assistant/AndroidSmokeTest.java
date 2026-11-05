@@ -73,7 +73,7 @@ public class AndroidSmokeTest {
             assertEquals("true",js(scenario,"window.pdfResult.includes('Budget 120 millions')"));
             js(scenario,"window.ocrResult=null;const testCanvas=document.createElement('canvas');testCanvas.width=900;testCanvas.height=160;const testContext=testCanvas.getContext('2d');testContext.fillStyle='white';testContext.fillRect(0,0,900,160);testContext.fillStyle='black';testContext.font='bold 48px Arial';testContext.fillText('BUDGET 120 MILLIONS',30,95);testCanvas.toBlob(b=>window.InterpreteDocuments.extract(new File([b],'ocr.png',{type:'image/png'})).then(r=>window.ocrResult=r.text).catch(e=>window.ocrResult='ERROR:'+e.message),'image/png');true");
             until(scenario,"window.ocrResult!==null",90000);
-            assertEquals("true",js(scenario,"window.ocrResult.includes('120')"));
+            assertEquals("OCR : "+js(scenario,"window.ocrResult"),"true",js(scenario,"window.ocrResult.includes('120')"));
 
             js(scenario, "document.getElementById('settings-button').click();document.getElementById('transcript').value='Une affirmation de test qui doit être vérifiée.';document.getElementById('transcript').dispatchEvent(new Event('input'));document.getElementById('composer').requestSubmit();true");
             until(scenario, "document.querySelectorAll('.result-card').length===1");

@@ -360,5 +360,26 @@ class BrowserChecks(unittest.TestCase):
         self.assertEqual(self.requests,[])
 
 
+    def test_audio_archive_links_all_segments_and_rejects_unsafe_paths(self):
+        html=self.page.evaluate("""() => {
+          const a=InterpreteArchive;
+          const first={id:'clip_11111111-1111-1111-1111-111111111111',duration_ms:12000,captured_at:'2026-01-01T12:00:00Z',sha256:'test'};
+          const second={...first,id:'clip_22222222-2222-2222-2222-222222222222'};
+          a.session.audio.push(first,second,{...first,id:'../../private'});
+          const identities=[a.recordTranscript('Premier fragment de la déclaration.',first),a.recordTranscript('Second fragment de la déclaration.',second)];
+          const entry=a.createSubmission('Une déclaration répartie sur deux segments.','live',identities);
+          a.completeSubmission(entry,{checks:[{claim:'Affirmation fictive',verdict:'Informations insuffisantes',summary:'Test',sources:[]}]});
+          const snapshot=a.snapshot();snapshot.audio_directory='audio/';return a.htmlDocument(snapshot);
+        }""")
+        viewer=self.context.new_page();viewer.on('pageerror',lambda error:self.errors.append(str(error)))
+        viewer.set_content(html)
+        expect(viewer.locator('#transcript-list audio')).to_have_count(2)
+        viewer.locator('#graph .node-quote').click()
+        expect(viewer.locator('#map-selection audio')).to_have_count(2)
+        sources=viewer.locator('audio').evaluate_all('(nodes)=>nodes.map(node=>node.getAttribute("src"))')
+        self.assertTrue(all(source.startswith('audio/clip_') and '..' not in source for source in sources))
+        viewer.close()
+
+
 if __name__ == '__main__':
     unittest.main()

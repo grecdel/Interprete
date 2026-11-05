@@ -170,6 +170,8 @@ public final class MainActivity extends Activity implements InterpreteApp.EventS
             case "settings": app.resolve(id, Json.object("canRemember", app.vault.available(), "hasSavedKey", app.vault.remembered(), "overlayEnabled", getSharedPreferences("preferences", MODE_PRIVATE).getBoolean("overlay", false) && Settings.canDrawOverlays(this))); break;
             case "saveKey": network.execute(() -> { try { app.vault.save(data.optString("key"), data.optBoolean("remember")); app.resolve(id, Json.object("configured", true)); } catch (Exception error) { app.reject(id, MicrophoneEngine.safeMessage(error)); } }); break;
             case "startMic": microphoneOptions=data; requestMicrophone(id); break;
+            case "extractImage":
+                network.execute(()->{try {byte[] bytes=android.util.Base64.decode(data.optString("base64"),android.util.Base64.DEFAULT);NativeImageOcr.extract(bytes,value->app.resolve(id,value),message->app.reject(id,message));}catch(Exception error){app.reject(id,"Image illisible.");}});break;
             case "audioInventory": network.execute(()->{try{app.resolve(id,Json.object("clips",app.audioStore.inventory()));}catch(Exception error){app.reject(id,"Inventaire indisponible.");}});break;
             case "clearAudio": if(app.service!=null){app.reject(id,"Arrêtez l’assistant avant de supprimer les audios.");break;} app.audioStore.clear();app.resolve(id,new JSONObject());break;
             case "stopMic": if (app.service != null) app.service.stopMic(() -> app.resolve(id, new JSONObject())); else app.resolve(id, new JSONObject()); break;

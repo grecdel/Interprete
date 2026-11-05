@@ -296,7 +296,7 @@ async function startListening() {
     if (!window.interpreteRecordOnly && !configured && !await refreshConfiguration()) { toggleSettings(true); return; }
     wantedListening = true; ui.error.hidden = true; updateStatus();
     ui['live-preview'].hidden = false;
-    ui['live-queue'].textContent = 'Transcription par extraits de 12 secondes · audio envoyé à OpenAI.';
+    ui['live-queue'].textContent = window.interpreteRecordOnly ? 'Enregistrement local hors ligne · aucun audio envoyé à OpenAI.' : 'Transcription par extraits de 12 secondes · audio envoyé à OpenAI.';
     const epoch = ++microphoneEpoch;
     const capture = new window.InterpreteMicrophone({
       transcribe: (audio, mimeType) => desktop.transcribe(audio, mimeType),

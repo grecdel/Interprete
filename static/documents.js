@@ -30,6 +30,7 @@ window.InterpreteDocuments = (() => {
     ocrScript ||= new Promise((resolve,reject)=>{const script=document.createElement('script');script.src='/vendor/ocr/tesseract.min.js';script.onload=resolve;script.onerror=()=>reject(new Error('Moteur OCR local indisponible.'));document.head.append(script);});return ocrScript;
   }
   async function ocr(file, progress) {
+    if(window.interpreteDesktop?.extractImage){progress('OCR local Android…');return window.interpreteDesktop.extractImage(file);}
     await loadOcr();let worker;
     try {
       worker=await Tesseract.createWorker('fra+eng',1,{workerPath:'/vendor/ocr/worker.min.js',corePath:'/vendor/ocr/core/tesseract-core-lstm.wasm.js',langPath:'/vendor/ocr/lang',workerBlobURL:false,gzip:true,cacheMethod:'none',logger:value=>progress('OCR local · '+Math.round((value.progress||0)*100)+' %')});
