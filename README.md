@@ -10,7 +10,11 @@
 
 Une **bulle discrète** ouvre un **volet latéral** : le micro, les propos à vérifier et les sources restent à portée de main. Un dossier rassemble les documents ; un tableau d’enquête aide à relire les connexions après l’échange.
 
-![Principe de la bulle et du volet latéral — aperçu Linux avec données fictives](docs/assets/hero.png)
+![Interprète — aperçu du thème sombre et du volet latéral](docs/assets/hero.png)
+
+Quatre matières animées : **Pastel · eau**, **Sombre · électricité violette**, **Matrix · données numériques**, **Enquête · fumée**.
+
+![Les quatre matières de la bulle Interprète](docs/assets/orb-materials.png)
 
 *Aperçu du principe de l’interface sur Linux ; données fictives de démonstration. La disposition varie selon la plateforme et la taille d’écran.*
 

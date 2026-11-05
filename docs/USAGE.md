@@ -2,11 +2,13 @@
 
 ## Se repérer dans le volet latéral
 
-La bulle permet d’ouvrir l’assistant et de commander l’écoute, sous réserve des permissions et de la configuration. Sur bureau, le volet occupe une partie du bord de l’écran ; sur mobile, il s’adapte à la place disponible. Le maintien au-dessus des autres applications dépend du système. Android demande une permission spécifique pour la bulle.
+Au premier lancement, Interprète se présente et propose un thème : pastel, sombre, Matrix ou enquête. Ensuite, seule la bulle animée apparaît. Un clic propose trois actions : **Record** pour démarrer l’écoute et l’analyse, **Requête textuelle** pour saisir un contenu, ou **Ouvrir le panneau latéral** pour retrouver les outils. Le micro nécessite les permissions et la configuration. Sur bureau, le volet occupe une partie du bord de l’écran ; sur mobile, il s’adapte à la place disponible. Le maintien au-dessus des autres applications dépend du système. Android demande une permission spécifique pour la bulle.
+
+Quand le volet est ouvert, la même bulle se place en haut au centre et reste animée. Elle retrouve sa position flottante à la réduction. Les animations respectent le réglage système de réduction des mouvements.
 
 Dans le volet, l’en-tête donne accès aux **réglages**, à l’**archive** et à la réduction. La commande **micro** se trouve au-dessus du fil. Le **fil des vérifications** contient les analyses, sources et pistes de relance. La **zone de saisie** permet de vérifier une phrase, un article ou un lien. Le bouton **Dossier d’enquête** ouvre les documents et les connecteurs ; les outils locaux de lecture et calcul se déplient dans le volet.
 
-Choisir l’ambiance dans le sélecteur de thème : pastel, sombre, Matrix ou enquête. Réduire le volet arrête le micro. Sur Android, la touche Accueil peut laisser continuer une écoute déjà démarrée ; utiliser les commandes de la notification pour la mettre en pause ou arrêter l’assistant.
+Choisir l’ambiance dans le sélecteur de thème : pastel (eau), sombre (électricité violette), Matrix (données numériques) ou enquête (fumée). La matière de la bulle change immédiatement avec le thème. Réduire le volet arrête le micro. Sur Android, la touche Accueil peut laisser continuer une écoute déjà démarrée ; utiliser les commandes de la notification pour la mettre en pause ou arrêter l’assistant.
 
 ## Exemple 1 — Interview en direct
 

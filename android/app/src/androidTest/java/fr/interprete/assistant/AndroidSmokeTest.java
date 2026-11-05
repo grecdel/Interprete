@@ -60,6 +60,10 @@ public class AndroidSmokeTest {
             public void release() { }
         });
         try (ActivityScenario<MainActivity> scenario = ActivityScenario.launch(new Intent(app, MainActivity.class).putExtra("listen_on_open", true))) {
+            until(scenario,"window.InterpreteLauncher?.ready() && !document.getElementById('companion-launcher').hidden");
+            js(scenario,"document.getElementById('launcher-complete').click();true");
+            until(scenario,"document.getElementById('companion-launcher').hidden");
+            js(scenario,"document.getElementById('bubble').click();document.querySelector('[data-action=panel]').click();true");
             until(scenario, "!!document.getElementById('settings-tray') && !document.getElementById('settings-tray').hidden");
             assertNull("Une Intent externe ne doit pas démarrer le micro.", app.service);
             until(scenario,"!!document.getElementById('evidence-files') && !document.getElementById('evidence-files').disabled");

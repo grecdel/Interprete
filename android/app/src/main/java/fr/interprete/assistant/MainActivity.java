@@ -39,7 +39,7 @@ public final class MainActivity extends Activity implements InterpreteApp.EventS
     private static final int MICROPHONE = 10, ARCHIVE = 20, IMPORT = 21;
     private InterpreteApp app;
     private WebView web;
-    private boolean ready, startOnOpen, unsaved;
+    private boolean ready, startOnOpen, unsaved, activationOnOpen;
     private String microphoneRequest;
     private JSONObject microphoneOptions=new JSONObject();
     private JSONObject archiveRequest;
@@ -67,7 +67,7 @@ public final class MainActivity extends Activity implements InterpreteApp.EventS
                 Uri uri = request.getUrl();
                 if (!"https".equals(uri.getScheme()) || !"app.interprete.local".equals(uri.getHost())) return blocked();
                 String filename = uri.getPath(); if (filename == null || filename.equals("/")) filename = "index.html"; else filename = filename.substring(1);
-                if (!java.util.Arrays.asList("index.html", "style.css", "app.js", "archive.js", "capture.js", "workspace.js", "documents.js", "analysis-tools.js", "android.js", "android.css").contains(filename) && !(filename.startsWith("vendor/") && !filename.contains("..") && filename.matches("[A-Za-z0-9_./-]+"))) return blocked();
+                if (!java.util.Arrays.asList("index.html", "style.css", "app.js", "archive.js", "capture.js", "workspace.js", "documents.js", "analysis-tools.js", "launcher.js", "android.js", "android.css").contains(filename) && !(filename.startsWith("vendor/") && !filename.contains("..") && filename.matches("[A-Za-z0-9_./-]+"))) return blocked();
                 try {
                     String mime = (filename.endsWith(".js") || filename.endsWith(".mjs")) ? "text/javascript" : filename.endsWith(".css") ? "text/css" : filename.endsWith(".wasm") ? "application/wasm" : filename.endsWith(".html") ? "text/html" : "application/octet-stream";
                     Map<String,String> headers = new HashMap<>();
@@ -116,11 +116,12 @@ public final class MainActivity extends Activity implements InterpreteApp.EventS
         if (ready) opened();
     }
     private boolean consumeListenIntent(Intent intent) {
+        activationOnOpen = app.launchToken.equals(intent.getStringExtra("listen_token"));
         boolean listen = intent.getBooleanExtra("listen_on_open", false) && app.launchToken.equals(intent.getStringExtra("listen_token"));
         intent.removeExtra("listen_on_open"); intent.removeExtra("listen_token"); return listen;
     }
     private void opened() {
-        app.emit(Json.object("event", "open", "listen", startOnOpen)); startOnOpen = false;
+        app.emit(Json.object("event", "open", "listen", startOnOpen,"activation",activationOnOpen)); startOnOpen = false;activationOnOpen=false;
     }
     @Override protected void onStop() { app.activityVisible = false; if (app.service != null) app.service.refreshBubble(); super.onStop(); }
     @Override protected void onDestroy() { app.detach(this); if (filePicker != null) filePicker.onReceiveValue(null); web.removeJavascriptInterface("InterpreteNative"); web.destroy(); network.shutdown(); super.onDestroy(); }
@@ -167,6 +168,10 @@ public final class MainActivity extends Activity implements InterpreteApp.EventS
                         catch (Exception error) { app.resolve(id, Json.object("ok", false, "status", 502, "body", Json.object("error", MicrophoneEngine.safeMessage(error)))); } });
                 } else app.reject(id, "Requête refusée.");
                 break;
+            case "launcher": app.resolve(id,new JSONObject());break;
+            case "onboard":
+                String onboardingTheme=data.optString("theme");if(!java.util.Arrays.asList("pastel","dark","matrix","investigation").contains(onboardingTheme)){app.reject(id,"Thème inconnu.");break;}
+                getSharedPreferences("preferences",MODE_PRIVATE).edit().putBoolean("onboardingComplete",true).putString("theme",onboardingTheme).apply();app.resolve(id,new JSONObject());break;
             case "theme":
                 String theme=data.optString("theme");if(!java.util.Arrays.asList("pastel","dark","matrix","investigation").contains(theme)){app.reject(id,"Thème inconnu.");break;}
                 getSharedPreferences("preferences",MODE_PRIVATE).edit().putString("theme",theme).apply();
@@ -174,7 +179,7 @@ public final class MainActivity extends Activity implements InterpreteApp.EventS
                 web.setBackgroundColor(background);((android.view.View)web.getParent()).setBackgroundColor(background);
                 if(Build.VERSION.SDK_INT>=30&&getWindow().getInsetsController()!=null) {int light=android.view.WindowInsetsController.APPEARANCE_LIGHT_STATUS_BARS|android.view.WindowInsetsController.APPEARANCE_LIGHT_NAVIGATION_BARS;getWindow().getInsetsController().setSystemBarsAppearance(theme.equals("dark")||theme.equals("matrix")?0:light,light);}
                 app.resolve(id,new JSONObject());break;
-            case "settings": app.resolve(id, Json.object("canRemember", app.vault.available(), "hasSavedKey", app.vault.remembered(), "overlayEnabled", getSharedPreferences("preferences", MODE_PRIVATE).getBoolean("overlay", false) && Settings.canDrawOverlays(this))); break;
+            case "settings": app.resolve(id, Json.object("onboardingComplete",getSharedPreferences("preferences",MODE_PRIVATE).getBoolean("onboardingComplete",false),"theme",getSharedPreferences("preferences",MODE_PRIVATE).getString("theme","pastel"),"canRemember", app.vault.available(), "hasSavedKey", app.vault.remembered(), "overlayEnabled", getSharedPreferences("preferences", MODE_PRIVATE).getBoolean("overlay", false) && Settings.canDrawOverlays(this))); break;
             case "saveKey": network.execute(() -> { try { app.vault.save(data.optString("key"), data.optBoolean("remember")); app.resolve(id, Json.object("configured", true)); } catch (Exception error) { app.reject(id, MicrophoneEngine.safeMessage(error)); } }); break;
             case "startMic": microphoneOptions=data; requestMicrophone(id); break;
             case "extractImage":

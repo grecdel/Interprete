@@ -20,6 +20,9 @@ const path = require('node:path');
   try {
     const page = await instance.firstWindow();
     page.on('pageerror', error => errors.push(error.message));
+    await page.locator('#launcher-complete').click();
+    await page.locator('#bubble').click();
+    await page.locator('[data-action=panel]').click();
     await page.locator('#settings-tray').waitFor({state: 'visible'});
     const info = await instance.evaluate(({BrowserWindow}) => ({alwaysOnTop: BrowserWindow.getAllWindows()[0].isAlwaysOnTop(), url: BrowserWindow.getAllWindows()[0].webContents.getURL()}));
     assert.equal(info.alwaysOnTop, true);
@@ -80,6 +83,7 @@ const path = require('node:path');
     assert.equal(collapsed.height, 90);
     if (process.env.INTERPRETE_SCREENSHOTS) await page.screenshot({path: path.join(root, 'docs/assets/bubble.png'), omitBackground: true});
     await instance.evaluate(({BrowserWindow}) => BrowserWindow.getAllWindows()[0].webContents.send('interprete:open'));
+    await page.locator('[data-action=panel]').click();
     await page.locator('#assistant-panel').waitFor({state: 'visible'});
     if (process.env.INTERPRETE_SCREENSHOTS) {
       await page.evaluate(() => { document.getElementById('status').textContent = 'Démonstration · données fictives'; document.getElementById('feed').scrollTop = 0; });

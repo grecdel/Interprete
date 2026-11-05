@@ -53,12 +53,12 @@ function updateStatus() {
   ui['listen-title'].textContent = wantedListening ? (listening ? 'À l’écoute du reportage' : 'Ouverture du micro…') : 'Écouter un reportage';
   ui['listen-subtitle'].textContent = wantedListening ? 'Cliquez pour mettre l’écoute en pause.' : 'Un clic. Les infos se vérifient au fil du direct.';
   ui.microphone.querySelector('use').setAttribute('href', wantedListening ? '#i-pause' : '#i-mic');
-  ui.bubble.setAttribute('aria-label', wantedListening ? 'Mettre l’écoute en pause' : 'Écouter un reportage et ouvrir Interprete');
-  ui['bubble-label'].textContent = wantedListening ? 'Cliquer pour mettre en pause' : busy ? 'Vérification en cours…' : 'Un clic pour écouter';
+  ui.bubble.setAttribute('aria-label', 'Activer Interprète et choisir une action');
+  ui['bubble-label'].textContent = wantedListening ? 'Écoute active · ouvrir les actions' : busy ? 'Vérification en cours…' : 'Un clic pour m’activer';
   if (!recognition && !desktop) {
     ui['listen-title'].textContent = 'La saisie reste à votre écoute';
     ui['listen-subtitle'].textContent = 'Pour le micro, utilisez Chrome sur ordinateur.';
-    ui.bubble.setAttribute('aria-label', 'Ouvrir Interprete et saisir un contenu');
+    ui.bubble.setAttribute('aria-label', 'Activer Interprète et choisir une action');
     ui['bubble-label'].textContent = 'Un clic pour ouvrir';
   }
   ui.verify.disabled = busy || ui.transcript.value.trim().length < 10;
@@ -449,7 +449,7 @@ if (desktop) {
   ui.detach.hidden = true;
   ui['settings-button'].onclick = () => toggleSettings(ui['settings-tray'].hidden);
   ui['quit-desktop'].onclick = () => desktop.quit();
-  desktop.onOpen(() => setPanelOpen(true));
+  desktop.onOpen(() => { if(!window.InterpreteLauncher)setPanelOpen(true); });
   desktop.settings().then(settings => {
     ui['remember-key'].disabled = !settings.canRemember;
     if (!settings.canRemember) ui['storage-help'].textContent = 'Aucun coffre sécurisé disponible : la clé restera uniquement en mémoire.';
@@ -496,7 +496,7 @@ if (desktop) {
 }
 window.addEventListener('pagehide', stopListening);
 updateComposer();
-refreshConfiguration().then(() => { scheduleLive(); if (desktop && !configured) toggleSettings(true); });
+refreshConfiguration().then(() => { scheduleLive(); });
 
 // Appearance preferences contain no interview data or API credentials.
 (() => {
@@ -507,14 +507,14 @@ refreshConfiguration().then(() => { scheduleLive(); if (desktop && !configured) 
   for (const [value, text] of Object.entries(themes)) {
     const option = document.createElement('option'); option.value = value; option.textContent = text; select.append(option);
   }
-  function apply(value) {
+  function apply(value, notify = true) {
     const theme = Object.hasOwn(themes, value) ? value : 'pastel';
     document.documentElement.dataset.theme = theme; select.value = theme;
-    window.interpreteDesktop?.setTheme?.(theme)?.catch(() => {});
+    if(notify)window.interpreteDesktop?.setTheme?.(theme)?.catch(() => {});
     document.querySelector('meta[name="theme-color"]')?.setAttribute('content', theme === 'pastel' ? '#f3eff9' : theme === 'matrix' ? '#030c08' : '#10131d');
   }
   let saved = 'pastel'; try { saved = localStorage.getItem('interprete-theme') || saved; } catch {}
-  apply(saved);
+  apply(saved, false);
   select.onchange = () => { apply(select.value); try { localStorage.setItem('interprete-theme', select.value); } catch {} };
   label.append(select); document.querySelector('.panel-header').after(label);
 })();

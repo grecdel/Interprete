@@ -1,5 +1,5 @@
 .android-mode { background: #f3f1f8; }
-.android-mode .assistant-panel { inset: 8px 8px 82px; box-shadow: none; }
+.android-mode .assistant-panel { width:auto; inset: 8px 8px 82px; box-shadow: none; }
 .android-mode .panel-header { padding-top: 16px; }
 .android-mode .panel-identity h2 { font-size: 17px; }
 .android-mode .listen-copy>span { font-size: 11px; }

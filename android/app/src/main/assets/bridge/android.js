@@ -36,14 +36,17 @@
       window.stopListening?.();
     } else if (event.event === 'overlay') overlayState(event.enabled, false);
     else if (event.event === 'open') {
+      if(!event.activation&&!event.listen)return;
       opened.forEach(callback => callback());
-      if (event.listen) document.getElementById('bubble').click();
+      if (event.listen) window.InterpreteLauncher?.show();
     }
   };
   window.interpreteDesktop = {
     request: (path, body) => call('request', {path, body}),
     transcribe: () => Promise.reject(new Error('Utilisez la capture Android native.')),
     settings: () => call('settings'),
+    setLauncherOpen: open => {call('launcher',{open}).catch(()=>{});},
+    completeOnboarding: theme => call('onboard',{theme}),
     setTheme: theme => call('theme',{theme}),
     extractImage: async file => {const encoded=await new Promise((resolve,reject)=>{const reader=new FileReader();reader.onload=()=>resolve(reader.result.split(',')[1]);reader.onerror=reject;reader.readAsDataURL(file);});return call('extractImage',{base64:encoded},120000);},
     saveKey: (key, remember) => call('saveKey', {key, remember}),

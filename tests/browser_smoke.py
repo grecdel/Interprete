@@ -75,6 +75,9 @@ class BrowserChecks(unittest.TestCase):
         self.page.route('**/api/status', lambda route: route.fulfill(json={'configured': True}))
         self.page.route('**/api/verify', self.respond)
         self.page.goto(self.base)
+        self.page.locator('#launcher-complete').click()
+        self.page.locator('#bubble').click()
+        self.page.locator('[data-action=panel]').click()
         expect(self.page.locator('#configuration')).to_be_hidden()
 
     def tearDown(self):
@@ -104,6 +107,60 @@ class BrowserChecks(unittest.TestCase):
         expect(self.page.locator('#bubble')).to_be_in_viewport()
         self.assertFalse(self.page.evaluate('document.documentElement.scrollWidth > innerWidth'))
 
+    def test_orb_materials_animate_and_respect_reduced_motion(self):
+        colors = set()
+        for theme in ['pastel', 'dark', 'matrix', 'investigation']:
+            self.page.locator('.theme-control select').select_option(theme)
+            orb = self.page.locator('#bubble .orb-ribbon').first
+            colors.add(orb.evaluate('el => getComputedStyle(el).borderTopColor'))
+            before = orb.evaluate('el => getComputedStyle(el).transform')
+            self.page.wait_for_timeout(150)
+            self.assertNotEqual(before, orb.evaluate('el => getComputedStyle(el).transform'))
+            self.assertEqual(self.page.locator('#bubble .orb-data').is_visible(), theme == 'matrix')
+        self.assertEqual(len(colors), 4)
+        self.page.emulate_media(reduced_motion='reduce')
+        for selector in ['.orb-ribbon', '.orb-data', '.bubble-aura', '.bubble-face .orb-core']:
+            self.assertEqual(self.page.locator('#bubble ' + selector).first.evaluate(
+                'el => getComputedStyle(el).animationName'), 'none')
+
+    def test_orb_welcome_actions_and_panel_position(self):
+        self.page.evaluate('localStorage.clear()')
+        self.page.reload()
+        expect(self.page.locator('#launcher-welcome')).to_be_visible()
+        expect(self.page.locator('#assistant-panel')).to_be_hidden()
+        self.page.get_by_label('Thème au premier lancement').select_option('matrix')
+        self.page.locator('#launcher-complete').click()
+        self.page.reload()
+        self.page.wait_for_function('window.InterpreteLauncher?.ready()')
+        expect(self.page.locator('#companion-launcher')).to_be_hidden()
+        expect(self.page.locator('html')).to_have_attribute('data-theme', 'matrix')
+        self.page.locator('#bubble').click()
+        expect(self.page.locator('.launcher-choices button')).to_have_count(3)
+        self.page.locator('[data-action=text]').click()
+        expect(self.page.locator('#transcript')).to_be_focused()
+        for width, height in [(1440, 960), (390, 844)]:
+            self.page.set_viewport_size({'width': width, 'height': height})
+            panel = self.page.locator('#assistant-panel').bounding_box()
+            orb = self.page.locator('#bubble').bounding_box()
+            self.assertAlmostEqual(orb['x'] + orb['width'] / 2,
+                                   panel['x'] + panel['width'] / 2, delta=1)
+            self.assertGreaterEqual(orb['y'], panel['y'])
+            self.assertLess(orb['y'] + orb['height'], panel['y'] + 100)
+            self.assertEqual(self.page.locator('.bubble-face .orb-core').evaluate(
+                'el => getComputedStyle(el).animationName'), 'energy-flow')
+        self.page.add_style_tag(path=str(Path('android/app/src/main/assets/bridge/android.css').resolve()))
+        for mode in ['desktop-mode', 'android-mode', 'pip-body']:
+            self.page.evaluate('(mode) => document.body.className = `companion-mode ${mode}`', mode)
+            panel = self.page.locator('#assistant-panel').bounding_box()
+            orb = self.page.locator('#bubble').bounding_box()
+            self.assertAlmostEqual(orb['x'] + orb['width'] / 2,
+                                   panel['x'] + panel['width'] / 2, delta=1, msg=mode)
+        self.page.evaluate('document.body.className = "companion-mode"')
+        self.page.locator('#collapse').click()
+        expect(self.page.locator('#assistant-panel')).to_be_hidden()
+        self.assertGreater(self.page.locator('#bubble').bounding_box()['y'], 700)
+        self.assertEqual(self.requests, [])
+
     def test_text_article_and_link_keep_sources_and_follow_up(self):
         article = 'Article de test sur un budget. ' * 250
         self.submit(article)
@@ -122,6 +179,7 @@ class BrowserChecks(unittest.TestCase):
         self.page.locator('#collapse').click()
         expect(self.page.locator('#assistant-panel')).to_be_hidden()
         self.page.locator('#bubble').click()
+        self.page.locator('[data-action=record]').click()
         expect(self.page.locator('#microphone')).to_have_attribute('aria-pressed', 'true')
         self.page.evaluate("testMicrophone.emit('Le budget annoncé a augmenté pendant cette période.')")
         self.page.clock.fast_forward(3000)
@@ -188,6 +246,8 @@ class BrowserChecks(unittest.TestCase):
         viewer.close()
         # Import into a new session, then ensure context reaches the next search.
         self.page.reload()
+        self.page.locator('#bubble').click()
+        self.page.locator('[data-action=panel]').click()
         self.page.locator('#archive-button').click()
         self.page.locator('#import-archive').set_input_files(json_path)
         expect(self.page.locator('#archive-status')).to_contain_text('2 propos importés')
@@ -199,6 +259,7 @@ class BrowserChecks(unittest.TestCase):
     def test_transcript_export_is_complete_and_html_is_not_executed(self):
         unsafe = 'Un propos de test </script><script>window.INJECTED=true</script>.'
         self.page.locator('#bubble').click()
+        self.page.locator('[data-action=record]').click()
         self.page.evaluate('(text) => testMicrophone.emit(text)', unsafe)
         self.page.locator('#microphone').click()
         self.page.locator('#archive-button').click()
@@ -230,6 +291,8 @@ class BrowserChecks(unittest.TestCase):
         self.page.unroute('**/api/status')
         self.page.route('**/api/status', lambda route: route.fulfill(json={'configured': False}))
         self.page.reload()
+        self.page.locator('#bubble').click()
+        self.page.locator('[data-action=text]').click()
         expect(self.page.locator('#configuration')).to_be_visible()
         self.page.locator('#transcript').fill('Une affirmation qui attend une configuration du service.')
         self.page.locator('#verify').click()
@@ -239,6 +302,7 @@ class BrowserChecks(unittest.TestCase):
 
     def test_microphone_permission_failure_is_visible_and_stops_listening(self):
         self.page.locator('#bubble').click()
+        self.page.locator('[data-action=record]').click()
         self.page.evaluate("testMicrophone.onerror({error: 'not-allowed'})")
         expect(self.page.locator('#error')).to_contain_text('micro n’a pas été autorisé')
         expect(self.page.locator('#microphone')).to_have_attribute('aria-pressed', 'false')
@@ -302,6 +366,8 @@ class BrowserChecks(unittest.TestCase):
         expect(self.page.locator('#transcript')).to_have_value('Passage à vérifier : 120 millions.')
         self.assertEqual(self.requests, [])
         self.page.reload()
+        self.page.locator('#bubble').click()
+        self.page.locator('[data-action=panel]').click()
         self.page.locator('.workspace-open').click()
         expect(self.page.locator('.evidence-list article')).to_have_count(1)
         expect(self.page.locator('.evidence-list textarea')).to_have_value('Passage à vérifier : 120 millions.')

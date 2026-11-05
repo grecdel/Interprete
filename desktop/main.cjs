@@ -10,9 +10,13 @@ const {API_PATHS, validKey, externalUrl, panelBounds, bubbleBounds} = require('.
 if (process.platform === 'linux' && process.env.DISPLAY) app.commandLine.appendSwitch('ozone-platform', 'x11');
 
 if (process.env.INTERPRETE_USER_DATA) app.setPath('userData', process.env.INTERPRETE_USER_DATA);
-let window, backend, origin, tray;
+let window, backend, origin, tray, floatingBounds;
 let unsaved = false, quitting = false, askingToQuit = false, microphoneAllowed = false;
 const token = randomBytes(32).toString('hex');
+const preferencesPath = () => path.join(app.getPath('userData'),'preferences.json');
+function preferences(){try{return JSON.parse(fs.readFileSync(preferencesPath(),'utf8'));}catch{return {};}}
+function savePreferences(value){fs.mkdirSync(app.getPath('userData'),{recursive:true,mode:0o700});fs.writeFileSync(preferencesPath(),JSON.stringify(value),{mode:0o600});}
+function validTheme(theme){if(!['pastel','dark','matrix','investigation'].includes(theme))throw new Error('Thème inconnu.');return theme;}
 const credentialsPath = () => path.join(app.getPath('userData'), 'credentials.bin');
 const workArea = () => screen.getDisplayNearestPoint(screen.getCursorScreenPoint()).workArea;
 function secureStorageAvailable() {
@@ -41,10 +45,14 @@ function setOpen(open) {
   if (!window) return;
   const area = screen.getDisplayMatching(window.getBounds()).workArea;
   window.setMinimumSize(open ? 350 : 90, open ? 460 : 90);
-  window.setBounds(open ? panelBounds(area) : bubbleBounds(area));
+  const target=bubbleBounds(area);if(!open&&floatingBounds){target.x=Math.max(area.x,Math.min(area.x+area.width-90,floatingBounds.x));target.y=Math.max(area.y,Math.min(area.y+area.height-90,floatingBounds.y));}
+  window.setBounds(open ? panelBounds(area) : target);
   window.setSkipTaskbar(!open);
 }
 function installIpc() {
+  ipcMain.handle('interprete:theme',(event,theme)=>{checkSender(event);savePreferences({...preferences(),theme:validTheme(theme)});});
+  ipcMain.handle('interprete:onboard',(event,theme)=>{checkSender(event);savePreferences({...preferences(),theme:validTheme(theme),onboardingComplete:true});});
+  ipcMain.on('interprete:launcher',(event,open)=>{checkSender(event);if(open){if(window.getBounds().width===90)floatingBounds=window.getBounds();const area=screen.getDisplayMatching(window.getBounds()).workArea;window.setMinimumSize(320,400);window.setBounds({...bubbleBounds(area),x:area.x+area.width-360,y:area.y+Math.max(0,area.height-480),width:350,height:460});window.setSkipTaskbar(true);}else setOpen(false);});
   ipcMain.handle('interprete:request', async (event, {path: apiPath, data}) => {
     checkSender(event);
     if (!API_PATHS.has(apiPath) || (apiPath === '/api/status' && data !== undefined) || JSON.stringify(data || '').length > 260000) throw new Error('Requête refusée.');
@@ -59,7 +67,7 @@ function installIpc() {
   });
   ipcMain.handle('interprete:settings', event => {
     checkSender(event);
-    return {canRemember: secureStorageAvailable(), hasSavedKey: fs.existsSync(credentialsPath()) && secureStorageAvailable()};
+    return {canRemember: secureStorageAvailable(), hasSavedKey: fs.existsSync(credentialsPath()) && secureStorageAvailable(), onboardingComplete:Boolean(preferences().onboardingComplete),theme:preferences().theme||'pastel'};
   });
   ipcMain.handle('interprete:key', async (event, {key, remember}) => {
     checkSender(event);
@@ -120,12 +128,12 @@ async function startBackend() {
   });
 }
 function openPanel() {
-  window.show(); setOpen(true); window.webContents.send('interprete:open'); window.focus();
+  window.show(); window.webContents.send('interprete:open'); window.focus();
 }
 async function createWindow() {
   const area = workArea();
   window = new BrowserWindow({
-    ...panelBounds(area), minWidth: 350, minHeight: 460, frame: false, transparent: true,
+    ...bubbleBounds(area), minWidth: 90, minHeight: 90, frame: false, transparent: true,
     backgroundColor: '#00000000', alwaysOnTop: true, resizable: false, show: false,
     title: 'Interprete', icon: path.join(app.getAppPath(), 'docs/assets/icon.png'),
     webPreferences: {preload: path.join(__dirname, 'preload.cjs'), contextIsolation: true, nodeIntegration: false, sandbox: true, webSecurity: true, backgroundThrottling: false}
