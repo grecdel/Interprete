@@ -30,7 +30,10 @@ public class AndroidSmokeTest {
         assertTrue(complete.await(10, TimeUnit.SECONDS)); return result.get();
     }
     private void until(ActivityScenario<MainActivity> scenario, String condition) throws Exception {
-        long end = SystemClock.elapsedRealtime() + 20000;
+        until(scenario,condition,20000);
+    }
+    private void until(ActivityScenario<MainActivity> scenario,String condition,long timeout) throws Exception {
+        long end = SystemClock.elapsedRealtime() + timeout;
         while (SystemClock.elapsedRealtime() < end) { if ("true".equals(js(scenario, condition))) return; SystemClock.sleep(200); }
         String state = js(scenario, "JSON.stringify({status:document.getElementById('status').textContent,error:document.getElementById('error-text').textContent,archive:document.getElementById('archive-status').textContent,exportDisabled:document.getElementById('export-html').disabled})");
         android.content.Context context = InstrumentationRegistry.getInstrumentation().getTargetContext();
@@ -39,11 +42,12 @@ public class AndroidSmokeTest {
     }
     @Test public void keyEntryVerificationAndNativeRecordingWorkWithoutRealApiCalls() throws Exception {
         InterpreteApp app = (InterpreteApp) InstrumentationRegistry.getInstrumentation().getTargetContext().getApplicationContext();
+        java.util.concurrent.atomic.AtomicInteger transcriptionCalls=new java.util.concurrent.atomic.AtomicInteger();
         app.useTestApi(new NativeApi(app, app.vault) {
             @Override JSONObject verify(JSONObject value) {
                 return Json.object("checks", Json.array(Json.object("claim", "Affirmation de test Android", "verdict", "Informations insuffisantes", "summary", "Exemple simulé.", "sources", new JSONArray(), "connections", new JSONArray())), "sources", new JSONArray(), "has_sources", false, "analysis", "");
             }
-            @Override String transcribe(byte[] wav) { assertTrue(wav.length > 44); return "La dernière phrase enregistrée pour le test Android."; }
+            @Override String transcribe(byte[] wav) { transcriptionCalls.incrementAndGet(); assertTrue(wav.length > 44); return "La dernière phrase enregistrée pour le test Android."; }
         });
         app.useTestAudio(() -> new MicrophoneEngine.Source() {
             volatile boolean active;
@@ -63,6 +67,14 @@ public class AndroidSmokeTest {
             assertEquals("\"\"", js(scenario, "document.getElementById('api-key').value"));
             String stored = app.getSharedPreferences("api-vault", Context.MODE_PRIVATE).getString("ciphertext", "");
             assertFalse(stored.contains("fake-key-used-only")); assertFalse(stored.isEmpty());
+            String pdf="JVBERi0xLjQKMSAwIG9iago8PCAvVHlwZSAvQ2F0YWxvZyAvUGFnZXMgMiAwIFIgPj4KZW5kb2JqCjIgMCBvYmoKPDwgL1R5cGUgL1BhZ2VzIC9LaWRzIFszIDAgUl0gL0NvdW50IDEgPj4KZW5kb2JqCjMgMCBvYmoKPDwgL1R5cGUgL1BhZ2UgL1BhcmVudCAyIDAgUiAvTWVkaWFCb3ggWzAgMCA2MDAgMjAwXSAvUmVzb3VyY2VzIDw8IC9Gb250IDw8IC9GMSA0IDAgUiA+PiA+PiAvQ29udGVudHMgNSAwIFIgPj4KZW5kb2JqCjQgMCBvYmoKPDwgL1R5cGUgL0ZvbnQgL1N1YnR5cGUgL1R5cGUxIC9CYXNlRm9udCAvSGVsdmV0aWNhID4+CmVuZG9iago1IDAgb2JqCjw8IC9MZW5ndGggNTAgPj4Kc3RyZWFtCkJUIC9GMSAyNCBUZiAzMCAxMDAgVGQgKEJ1ZGdldCAxMjAgbWlsbGlvbnMpIFRqIEVUCmVuZHN0cmVhbQplbmRvYmoKeHJlZgowIDYKMDAwMDAwMDAwMCA2NTUzNSBmIAowMDAwMDAwMDA5IDAwMDAwIG4gCjAwMDAwMDAwNTggMDAwMDAgbiAKMDAwMDAwMDExNSAwMDAwMCBuIAowMDAwMDAwMjQxIDAwMDAwIG4gCjAwMDAwMDAzMTEgMDAwMDAgbiAKdHJhaWxlcgo8PCAvU2l6ZSA2IC9Sb290IDEgMCBSID4+CnN0YXJ0eHJlZgo0MTEKJSVFT0Y=";
+            js(scenario,"window.pdfResult=null;window.InterpreteDocuments.extract(new File([Uint8Array.from(atob("+JSONObject.quote(pdf)+"),c=>c.charCodeAt(0))],'test.pdf',{type:'application/pdf'})).then(r=>window.pdfResult=r.text).catch(e=>window.pdfResult='ERROR:'+e.message);true");
+            until(scenario,"window.pdfResult!==null",90000);
+            assertEquals("true",js(scenario,"window.pdfResult.includes('Budget 120 millions')"));
+            js(scenario,"window.ocrResult=null;const testCanvas=document.createElement('canvas');testCanvas.width=900;testCanvas.height=160;const testContext=testCanvas.getContext('2d');testContext.fillStyle='white';testContext.fillRect(0,0,900,160);testContext.fillStyle='black';testContext.font='bold 48px Arial';testContext.fillText('BUDGET 120 MILLIONS',30,95);testCanvas.toBlob(b=>window.InterpreteDocuments.extract(new File([b],'ocr.png',{type:'image/png'})).then(r=>window.ocrResult=r.text).catch(e=>window.ocrResult='ERROR:'+e.message),'image/png');true");
+            until(scenario,"window.ocrResult!==null",90000);
+            assertEquals("true",js(scenario,"window.ocrResult.includes('120')"));
+
             js(scenario, "document.getElementById('settings-button').click();document.getElementById('transcript').value='Une affirmation de test qui doit être vérifiée.';document.getElementById('transcript').dispatchEvent(new Event('input'));document.getElementById('composer').requestSubmit();true");
             until(scenario, "document.querySelectorAll('.result-card').length===1");
             assertEquals("true", js(scenario, "document.querySelector('.result-card').textContent.includes('Informations insuffisantes')"));
@@ -120,6 +132,15 @@ public class AndroidSmokeTest {
                     for(int i=0;i<2;i++) {org.json.JSONObject clip=session.getJSONArray("audio").getJSONObject(i);java.util.zip.ZipEntry entry=zip.getEntry("audio/"+clip.getString("id")+".wav");assertNotNull(entry);byte[] bytes=NativeApi.read(zip.getInputStream(entry),1024*1024);assertEquals('R',bytes[0]);assertEquals(clip.getLong("size"),bytes.length);}
                 }
             }finally{instrumentation.removeMonitor(zipPicker);zipFile.delete();}
+            int callsBeforeOffline=transcriptionCalls.get();
+            app.getSharedPreferences("api-vault",Context.MODE_PRIVATE).edit().clear().commit();app.vault.clearMemory();
+            js(scenario,"document.getElementById('record-only').checked=true;document.getElementById('record-only').dispatchEvent(new Event('change'));window.refreshConfiguration();true");
+            until(scenario,"configured===false");
+            js(scenario,"document.getElementById('microphone').click();true");
+            until(scenario,"document.getElementById('companion').classList.contains('is-listening')");SystemClock.sleep(1100);
+            js(scenario,"document.getElementById('microphone').click();true");
+            until(scenario,"window.InterpreteArchive.snapshot().audio.length===3 && !document.getElementById('companion').classList.contains('is-listening')");
+            assertEquals(callsBeforeOffline,transcriptionCalls.get());
             js(scenario, "document.getElementById('archive-button').click();true");
             js(scenario, "document.getElementById('status').textContent='Démonstration · réponses simulées';document.getElementById('settings-button').click();true");
             InstrumentationRegistry.getInstrumentation().getUiAutomation().takeScreenshot().compress(android.graphics.Bitmap.CompressFormat.PNG, 100, new java.io.FileOutputStream(new java.io.File(app.getExternalFilesDir(null), "android-demo.png")));
