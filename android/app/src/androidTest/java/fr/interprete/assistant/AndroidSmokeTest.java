@@ -84,8 +84,11 @@ public class AndroidSmokeTest {
             // Replace only Android's document picker; the real archive bridge and writer run.
             java.io.File archive = new java.io.File(app.getFilesDir(), "test-interview.html");
             android.app.Instrumentation instrumentation = InstrumentationRegistry.getInstrumentation();
+            android.content.IntentFilter documentFilter = new android.content.IntentFilter(Intent.ACTION_CREATE_DOCUMENT);
+            documentFilter.addCategory(Intent.CATEGORY_OPENABLE);
+            documentFilter.addDataType("text/html");
             android.app.Instrumentation.ActivityMonitor picker = instrumentation.addMonitor(
-                new android.content.IntentFilter(Intent.ACTION_CREATE_DOCUMENT),
+                documentFilter,
                 new android.app.Instrumentation.ActivityResult(android.app.Activity.RESULT_OK,
                     new Intent().setData(android.net.Uri.fromFile(archive))), true);
             try {
