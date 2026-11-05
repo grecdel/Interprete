@@ -17,7 +17,7 @@ Date : **5 novembre 2026**. Audit réalisé pendant le développement, par revue
 - `npm audit` sur le lockfile : **0 alerte connue** après correction, toutes sévérités confondues au moment de l’audit.
 - `pip-audit -r requirements-build.txt` : **aucune vulnérabilité connue** signalée pour les dépendances Python de fabrication.
 - Inspection des fichiers suivis par Git : aucun magasin de signature privé, `.env` ou fichier de mot de passe suivi ; recherche de motifs de clés privées/API sans affichage de leurs valeurs : aucun motif détecté dans les fichiers texte examinés, hors bibliothèques tierces embarquées.
-- Régressions Python : 25 tests ; bureau JavaScript : 5 tests. Scénarios navigateur : 15 tests.
+- Régressions Python : 26 tests ; bureau JavaScript : 5 tests. Scénarios navigateur : 15 tests.
 - Revue des frontières : API locale réservée à la boucle locale ; contrôle d’origine des POST ; nonce privé sur bureau ; origines de la WebView contrôlées ; clés Android chiffrées avec Keystore ; aucune clé dans les ressources distribuées ; import de texte rendu avec `textContent` ; exports JSON échappés ; identifiants des extraits ZIP contraints ; plafonds de taille et délais pour les connecteurs.
 - Signatures et empreintes des téléchargements contrôlées avant publication ; clé privée de signature conservée hors Git et hors CI.
 

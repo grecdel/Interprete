@@ -65,3 +65,15 @@ class SearchTests(unittest.TestCase):
     def test_malformed_provider_data_fails_closed(self):
         for payload in [[],{'message':{'items':{}}}]:
             with self.assertRaises(ValueError):osint.search('crossref','query',self.opener(payload))
+
+    def test_public_provider_failure_does_not_request_openai_credentials(self):
+        import server
+        import urllib.error
+        from unittest.mock import patch
+        body=json.dumps({'provider':'gdelt','query':'climate'}).encode()
+        handler=object.__new__(server.Handler);handler.path='/api/osint';handler.headers={'Content-Length':str(len(body))};handler.rfile=io.BytesIO(body);handler.authorized=lambda:True;handler.send_json=Mock()
+        with patch('server.osint_search',side_effect=urllib.error.HTTPError('https://example.org',503,'Unavailable',{},None)):
+            handler.do_POST()
+        status,result=handler.send_json.call_args.args
+        self.assertEqual(status,502)
+        self.assertIn('ne nécessite pas de clé OpenAI',result['error'])

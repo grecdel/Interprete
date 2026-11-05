@@ -370,6 +370,8 @@ class Handler(BaseHTTPRequestHandler):
         except (ValueError, UnicodeError) as error:
             self.send_json(400, {'error': str(error)})
         except urllib.error.HTTPError as error:
+            if self.path == '/api/osint':
+                return self.send_json(502, {'error': f'Fournisseur documentaire indisponible (HTTP {error.code}). Réessayez plus tard ; ce connecteur ne nécessite pas de clé OpenAI.'})
             self.send_json(502, {'error': f'Service de recherche indisponible (HTTP {error.code}). Vérifiez la clé, le quota et le modèle côté serveur.'})
         except (OSError, TimeoutError):
             self.send_json(502, {'error': 'La recherche a échoué ou dépassé le délai. Réessayez.'})
