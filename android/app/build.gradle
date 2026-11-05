@@ -1,0 +1,35 @@
+plugins { id 'com.android.application' }
+android {
+    namespace 'fr.interprete.assistant'
+    compileSdk 36
+    buildToolsVersion '36.0.0'
+    defaultConfig {
+        applicationId 'fr.interprete.assistant'
+        minSdk 26
+        targetSdk 36
+        versionCode 3
+        versionName '0.3.0'
+        testInstrumentationRunner 'androidx.test.runner.AndroidJUnitRunner'
+    }
+    buildFeatures { buildConfig true }
+    buildTypes { release { minifyEnabled false; debuggable false } }
+    compileOptions { sourceCompatibility JavaVersion.VERSION_17; targetCompatibility JavaVersion.VERSION_17 }
+    testOptions { unitTests.returnDefaultValues = false; animationsDisabled = true }
+    lint { abortOnError true }
+}
+tasks.register('prepareWeb', Exec) {
+    workingDir rootProject.projectDir.parentFile
+    commandLine (project.findProperty('pythonExecutable') ?: 'python3'), 'scripts/prepare_android.py'
+    inputs.dir rootProject.file('../static')
+    inputs.file rootProject.file('../server.py')
+    inputs.dir file('src/main/assets/bridge')
+    outputs.dir file('src/main/assets/web')
+}
+tasks.named('preBuild').configure { dependsOn 'prepareWeb' }
+dependencies {
+    testImplementation 'junit:junit:4.13.2'
+    testImplementation 'org.json:json:20240303'
+    androidTestImplementation 'androidx.test:runner:1.6.2'
+    androidTestImplementation 'androidx.test:core:1.6.1'
+    androidTestImplementation 'androidx.test.ext:junit:1.2.1'
+}

@@ -1,0 +1,11 @@
+.android-mode { background: #f3f1f8; }
+.android-mode .assistant-panel { inset: 8px 8px 82px; box-shadow: none; }
+.android-mode .panel-header { padding-top: 16px; }
+.android-mode .panel-identity h2 { font-size: 17px; }
+.android-mode .listen-copy>span { font-size: 11px; }
+.android-mode #android-overlay { width: 100%; padding: 11px; border: 1px solid #d7cbe5; border-radius: 8px; background: #f6f1fa; color: #8d72a2; font-size: 11px; margin-top: 18px; }
+.android-mode #android-overlay-status { margin: 8px 0 0; font-size: 10px; line-height: 1.8; color: #a28bb0; }
+.android-mode .settings-tray { max-height: calc(100% - 90px); }
+.android-mode .source-title, .android-mode .source-domain { font-size: 11px; }
+.android-mode textarea { font-size: 16px; }
+@media(max-height:600px) { .android-mode .assistant-panel { bottom: 72px; }.android-mode .feed { min-height: 35px; }.android-mode .listen-copy>span { display: none; }.android-mode .bubble-dock { bottom: 13px; } }
