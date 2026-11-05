@@ -25,7 +25,7 @@ Le serveur Python et l’interface sont embarqués. Les builds sont validés sou
 
 ## Mode web local : Windows, macOS et Linux
 
-Ce mode nécessite **Python 3.11 ou plus récent** et les fichiers du dépôt. Aucun exécutable Windows ou macOS n’est annoncé comme publié ou testé.
+Ce mode nécessite **Python 3.11 ou plus récent** ([site officiel](https://www.python.org/downloads/)) et les fichiers du dépôt. Sous Windows, activer l’option d’ajout de Python au PATH pendant son installation. Aucun exécutable Windows ou macOS n’est annoncé comme publié ou testé.
 
 ```sh
 git clone https://github.com/grecdel/Interprete.git
@@ -37,13 +37,13 @@ Créer une clé OpenAI depuis son compte, puis configurer la variable uniquement
 Windows PowerShell ou invite de commandes :
 
 ```powershell
-py -3 -c "import getpass,os,runpy;os.environ['INTERPRETE_API_KEY']=getpass.getpass('Cle API OpenAI : ');runpy.run_path('server.py',run_name='__main__')"
+py -3 -c "import getpass,os,runpy;os.environ['INTERPRETE_API_KEY']=getpass.getpass('Cle API OpenAI : ');runpy.run_path(os.path.abspath('server.py'),run_name='__main__')"
 ```
 
 macOS / Linux :
 
 ```sh
-python3 -c "import getpass,os,runpy;os.environ['INTERPRETE_API_KEY']=getpass.getpass('Cle API OpenAI : ');runpy.run_path('server.py',run_name='__main__')"
+python3 -c "import getpass,os,runpy;os.environ['INTERPRETE_API_KEY']=getpass.getpass('Cle API OpenAI : ');runpy.run_path(os.path.abspath('server.py'),run_name='__main__')"
 ```
 
 La clé est saisie sans affichage et n’est pas inscrite littéralement dans l’historique de la commande. Sans Git, utiliser **Code → Download ZIP** sur GitHub, extraire les fichiers et ouvrir un terminal dans le dossier extrait.
