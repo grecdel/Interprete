@@ -22,6 +22,7 @@ final class ClaimNormalizer {
             if (host.equals("localhost") || host.endsWith(".local") || host.endsWith(".localhost") || host.indexOf('.') < 0 || host.contains(":")) return "";
             if (host.matches("[0-9.]+")) {
                 String[] p = host.split("\\."); if (p.length != 4) return "";
+                for(String octet:p)if(!octet.matches("0|[1-9][0-9]{0,2}")||Integer.parseInt(octet)>255)return "";
                 int a = Integer.parseInt(p[0]), b = Integer.parseInt(p[1]);
                 if (a == 0 || a == 10 || a == 127 || a >= 224 || (a == 169 && b == 254) || (a == 172 && b >= 16 && b <= 31) || (a == 192 && b == 168) || (a == 100 && b >= 64 && b <= 127)) return "";
             }

@@ -4,7 +4,7 @@
 
 Le dossier d’enquête conserve les pièces dans IndexedDB sur l’appareil. Limites actuelles : 8 Mio par pièce, 64 Mio pour le dossier. Extraction locale des textes TXT, Markdown, CSV, JSON et sous-titres SRT/VTT ; aperçu limité à 200 000 caractères. Les PDF peuvent être lus et leur texte extrait ; les images PNG/JPEG/WebP peuvent être traitées par OCR français/anglais local, au clic. Les autres formats sont conservables sans extraction spécifique. Voir les limites dans VERSION-0.4.md. Recherche dans les noms, notes et textes ; empreintes SHA-256 et dédoublonnage ; provenance renseignée par l’utilisateur ; association à une affirmation de la session ; préparation explicite d’un extrait à vérifier.
 
-L’export de session HTML/JSON conserve l’inventaire, le texte extrait et les annotations, pas les fichiers binaires originaux. Chaque pièce peut aussi être exportée séparément dans un conteneur JSON comprenant son original encodé en base64 et ses annotations ; ce conteneur se réimporte dans le dossier avec contrôle de l’empreinte. La bibliothèque est commune aux sessions sur cet appareil. Elle n’est pas une sauvegarde : effacer les données de l’application ou du navigateur peut l’effacer. Les empreintes ne prouvent pas l’authenticité d’un document. Trois connecteurs API sont intégrés : Crossref, data.gouv.fr et l’Annuaire des entreprises. Les autres raccourcis de recherche sont des liens externes. Les notices enregistrées ne remplacent pas la lecture du document original.
+L’export de session HTML/JSON conserve l’inventaire, le texte extrait et les annotations, pas les fichiers binaires originaux. Chaque pièce peut aussi être exportée séparément dans un conteneur JSON comprenant son original encodé en base64 et ses annotations ; ce conteneur se réimporte dans le dossier avec contrôle de l’empreinte. La bibliothèque est commune aux sessions sur cet appareil. Elle n’est pas une sauvegarde : effacer les données de l’application ou du navigateur peut l’effacer. Les empreintes ne prouvent pas l’authenticité d’un document. Huit connecteurs API sont intégrés : Crossref, data.gouv.fr, Annuaire des entreprises, Europe PMC, Wikidata, Wayback, GDELT et Open Library. Les autres raccourcis de recherche sont des liens externes. Les notices enregistrées ne remplacent pas la lecture du document original.
 
 ## Connecteurs proposés
 
@@ -67,3 +67,12 @@ Les capacités ci-dessous comprennent les trois connecteurs intégrés et les pr
 6. Connecteurs spécialisés : entreprises, géographie, archives et médias, selon les accès obtenus.
 
 La version Android 0.4 réunit ces ajouts. Les autres services du catalogue, l’alignement audio au mot et la fresque chronologique complète restent à développer. Consultez VERSION-0.4.md pour les limites, les plateformes concernées et la validation.
+
+
+## Extension 0.5
+
+Europe PMC donne accès aux notices biomédicales, dont des références PubMed ; il ne s’agit pas d’un accès universel au texte intégral. Wikidata sert à identifier des entités et leurs références. Wayback recherche une capture existante d’une URL HTTPS publique : il ne crée pas de capture. GDELT découvre des articles et ne prouve pas l’indépendance de leurs sources. Open Library fournit des notices bibliographiques.
+
+Essais réseau du 5 novembre 2026 : Europe PMC, Wikidata et Open Library ont renvoyé des résultats ; Wayback a répondu HTTP 429 et GDELT HTTP 503. Ces services restent soumis à leurs quotas et disponibilités. Les erreurs sont affichées, sans fabriquer de résultats.
+
+Les services sous licence ou avec accès propre (OpenCorporates, OpenSanctions, certains services juridiques, etc.) restent non activés. Les extensions navigateur comme InVID ne sont pas présentées comme intégrées nativement dans Android.

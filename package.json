@@ -1,8 +1,8 @@
 {
   "name": "interprete",
-  "version": "0.2.0",
+  "version": "0.5.0",
   "private": true,
-  "description": "Assistant de vérification journalistique de bureau",
+  "description": "Assistant de v\u00e9rification journalistique de bureau",
   "author": "Grec Del",
   "main": "desktop/main.cjs",
   "scripts": {
@@ -63,9 +63,12 @@
       ],
       "icon": "docs/assets/icon.png",
       "extendInfo": {
-        "NSMicrophoneUsageDescription": "Interprete transcrit les propos que vous choisissez de faire vérifier."
+        "NSMicrophoneUsageDescription": "Interprete transcrit les propos que vous choisissez de faire v\u00e9rifier."
       }
     }
   },
-  "desktopName": "Interprete.desktop"
+  "desktopName": "Interprete.desktop",
+  "overrides": {
+    "minimatch@>=7.0.0 <11.0.1": "11.0.1"
+  }
 }

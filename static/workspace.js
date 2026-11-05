@@ -96,7 +96,7 @@
   const tools = el('section', undefined, 'direct-osint');
   const toolTitle=el('h3','Rechercher dans les sources publiques');
   const provider=el('select'); provider.setAttribute('aria-label','Source OSINT');
-  for(const [value,label] of [['crossref','Crossref · publications scientifiques'],['data_gouv','data.gouv.fr · jeux de données'],['entreprises','Annuaire des entreprises · SIREN']]) {const option=el('option',label);option.value=value;provider.append(option);}
+  for(const [value,label] of [['crossref','Crossref · publications scientifiques'],['data_gouv','data.gouv.fr · jeux de données'],['entreprises','Annuaire des entreprises · SIREN'],['europe_pmc','Europe PMC · biomédecine / PubMed'],['wikidata','Wikidata · entités et références'],['wayback','Wayback · URL HTTPS à retrouver'],['gdelt','GDELT · découverte d’articles'],['openlibrary','Open Library · ouvrages']]) {const option=el('option',label);option.value=value;provider.append(option);}
   const term=el('input'); term.type='search';term.maxLength=250;term.placeholder='Sujet, titre, entreprise…';term.setAttribute('aria-label','Recherche OSINT directe');
   const results=el('div'); results.setAttribute('aria-live','polite');
   const cache=new Map();
