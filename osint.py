@@ -59,7 +59,7 @@ def search(provider, query, opener=None):
         'gdelt':'https://api.gdeltproject.org/api/v2/doc/doc?mode=artlist&format=json&maxrecords=5&query='+encoded,
         'openlibrary':'https://openlibrary.org/search.json?limit=5&fields=key,title,author_name,first_publish_year&q='+encoded,
     })
-    request = urllib.request.Request(endpoints[provider], headers={'Accept': 'application/json', 'User-Agent': 'Interprete/0.4 documentary-research'})
+    request = urllib.request.Request(endpoints[provider], headers={'Accept': 'application/json', 'User-Agent': 'Interprete/0.5 documentary-research'})
     if opener is None: opener=urllib.request.build_opener(NoRedirect()).open
     with opener(request, timeout=20) as response:
         raw = response.read(2 * 1024 * 1024 + 1)

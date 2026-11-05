@@ -8,6 +8,9 @@ import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
 
 final class OsintSearch {
+    private static boolean documentaryUrl(String value) {
+        try {java.net.URI uri=new java.net.URI(value);return !ClaimNormalizer.publicUrl(value).isEmpty()&&"https".equals(uri.getScheme())&&(uri.getPort()==-1||uri.getPort()==443);}catch(Exception error){return false;}
+    }
     static JSONObject search(JSONObject input) throws Exception {
         String provider=input.optString("provider"), query=input.optString("query").trim();
         if (query.length()<3 || query.length()>250) throw new IllegalArgumentException("Saisissez entre 3 et 250 caractères.");
@@ -18,7 +21,7 @@ final class OsintSearch {
             case "entreprises": endpoint="https://recherche-entreprises.api.gouv.fr/search?per_page=5&q="+encoded; break;
             case "europe_pmc":endpoint="https://www.ebi.ac.uk/europepmc/webservices/rest/search?format=json&pageSize=5&query="+encoded;break;
             case "wikidata":endpoint="https://www.wikidata.org/w/api.php?action=wbsearchentities&format=json&language=fr&limit=5&search="+encoded;break;
-            case "wayback":if(ClaimNormalizer.publicUrl(query).isEmpty()||!query.startsWith("https://"))throw new IllegalArgumentException("Utilisez une URL HTTPS publique.");endpoint="https://archive.org/wayback/available?url="+encoded;break;
+            case "wayback":if(!documentaryUrl(query))throw new IllegalArgumentException("Utilisez une URL HTTPS publique.");endpoint="https://archive.org/wayback/available?url="+encoded;break;
             case "gdelt":endpoint="https://api.gdeltproject.org/api/v2/doc/doc?mode=artlist&format=json&maxrecords=5&query="+encoded;break;
             case "openlibrary":endpoint="https://openlibrary.org/search.json?limit=5&fields=key,title,author_name,first_publish_year&q="+encoded;break;
             default: throw new IllegalArgumentException("Connecteur inconnu.");
@@ -27,7 +30,7 @@ final class OsintSearch {
         JSONObject payload;
         try {
             connection.setInstanceFollowRedirects(false); connection.setConnectTimeout(15000); connection.setReadTimeout(20000);
-            connection.setRequestProperty("Accept","application/json"); connection.setRequestProperty("User-Agent","Interprete/0.4 documentary-research");
+            connection.setRequestProperty("Accept","application/json"); connection.setRequestProperty("User-Agent","Interprete/0.5 documentary-research");
             int status=connection.getResponseCode(); if(status!=200) throw new IllegalStateException("Le connecteur documentaire est indisponible (HTTP "+status+").");
             try(java.io.InputStream stream=connection.getInputStream()) {payload=new JSONObject(new String(NativeApi.read(stream,2*1024*1024),StandardCharsets.UTF_8));}
         } finally {connection.disconnect();}
@@ -52,7 +55,7 @@ final class OsintSearch {
             else if(provider.equals("wayback")){if(!row.optBoolean("available"))continue;title="Version archivée : "+row.optString("timestamp");url=row.optString("url").replace("http://web.archive.org/","https://web.archive.org/");details="Capture de "+query+" ; date de capture distincte de la publication.";}
             else if(provider.equals("gdelt")){title=row.optString("title");url=row.optString("url");details="Repéré le "+row.optString("seendate")+" · "+row.optString("domain")+" · Indépendance des sources à vérifier.";}
             else {String key=row.optString("key");if(!key.matches("/works/OL[0-9]+W"))continue;title=row.optString("title");url="https://openlibrary.org"+key;details="Première publication : "+row.optString("first_publish_year");}
-            if(ClaimNormalizer.publicUrl(url).isEmpty() || !url.startsWith("https://")) continue;
+            if(!documentaryUrl(url)) continue;
             results.put(Json.object("title",title.substring(0,Math.min(500,title.length())),"url",url,"description",details.substring(0,Math.min(3000,details.length())),"provider",provider));
         }
         return Json.object("provider",provider,"query",query,"results",results,"retrieved_at",java.time.Instant.now().toString(),"cached",false,"notice","Résultats documentaires à examiner ; ils ne valident pas une affirmation.");

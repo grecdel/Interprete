@@ -17,5 +17,7 @@ public class OsintSearchTest {
         assertEquals(0,OsintSearch.normalize("wikidata","test",new JSONObject("{\"search\":[{\"id\":\"../../secret\"}]}" )).getJSONArray("results").length());
         assertEquals("",ClaimNormalizer.publicUrl("https://0177.0.0.1"));
         assertEquals("",ClaimNormalizer.publicUrl("https://127.1"));
+        assertEquals("",ClaimNormalizer.publicUrl("https://service.internal"));
+        assertEquals(0,OsintSearch.normalize("gdelt","test",new JSONObject("{\"articles\":[{\"url\":\"https://example.org:80\"}]}" )).getJSONArray("results").length());
     }
 }
