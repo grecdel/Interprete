@@ -3,6 +3,7 @@
 <p align="center"><strong>Une bulle pendant l’interview. Des pistes pour rebondir. Une archive pour tout relire.</strong></p>
 <p align="center">
   <a href="https://github.com/grecdel/Interprete/releases/tag/v0.2.0">Télécharger pour Linux</a> ·
+  <a href="https://github.com/grecdel/Interprete/releases/tag/v0.3.0">Télécharger pour Android</a> ·
   <a href="docs/DESKTOP.md">Premiers pas</a> ·
   <a href="docs/DEVELOPMENT.md">Développer</a>
 </p>
@@ -10,6 +11,7 @@
   <img src="https://img.shields.io/badge/statut-prototype-9b83ba" alt="Statut : prototype">
   <img src="https://img.shields.io/badge/bureau-Linux_x86__64-85789d" alt="Linux x86_64">
   <a href="https://github.com/grecdel/Interprete/actions/workflows/build-linux.yml"><img src="https://github.com/grecdel/Interprete/actions/workflows/build-linux.yml/badge.svg" alt="Compilation et tests Linux"></a>
+  <a href="https://github.com/grecdel/Interprete/actions/workflows/build-android.yml"><img src="https://github.com/grecdel/Interprete/actions/workflows/build-android.yml/badge.svg" alt="Compilation et tests Android"></a>
 </p>
 
 ![Interprete : aperçu de l’application Linux native, avec données fictives de présentation](docs/assets/hero.png)
@@ -18,7 +20,7 @@
 
 ## Sur Android aussi
 
-Une version Android autonome est préparée dans [les versions publiées](https://github.com/grecdel/Interprete/releases). Elle utilise le micro et une bulle optionnelle, avec les autorisations Android et une notification visible pendant l’écoute. La clé se saisit dans l’application ; aucun serveur Linux n’est nécessaire.
+Téléchargez [**Interprete-0.3.0-android.apk**](https://github.com/grecdel/Interprete/releases/download/v0.3.0/Interprete-0.3.0-android.apk) et ouvrez le fichier sur votre téléphone (**Android 8.0 ou ultérieur**, Android System WebView à jour). Cette version autonome utilise le micro et une bulle optionnelle, avec les autorisations Android et une notification visible pendant l’écoute. La clé se saisit dans l’application ; aucun serveur Linux n’est nécessaire.
 
 → [Guide Android : installation, permissions, bulle et archives](docs/ANDROID.md)
 
@@ -60,7 +62,7 @@ La carte reste consultable sans connexion. Seule l’ouverture des documents sou
 
 ## Ce que cette version garantit — et ses limites
 
-- Le serveur fonctionne **sur votre ordinateur**, avec une API locale réservée à l’application de bureau.
+- Sur Linux, le serveur fonctionne **sur votre ordinateur**, avec une API locale réservée à l’application de bureau. Sur Android, les appels API partent directement de l’application, sans serveur à installer.
 - L’audio est envoyé à OpenAI par extraits de 12 secondes, sur autorisation du micro. Aucun fichier audio n’est conservé. Il faut une connexion Internet.
 - Les recherches prennent plusieurs secondes. Ce prototype ne garantit pas une réponse instantanée ni une latence adaptée à chaque direct.
 - Une conclusion sans source associée est ramenée à **« Informations insuffisantes »**. Cela ne certifie pas les conclusions qui ont des sources.

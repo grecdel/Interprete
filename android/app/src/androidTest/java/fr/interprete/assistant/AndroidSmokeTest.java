@@ -72,6 +72,24 @@ public class AndroidSmokeTest {
             js(scenario, "document.getElementById('microphone').click();true");
             until(scenario, "window.InterpreteArchive.snapshot().transcript.length>0");
             assertEquals("true", js(scenario, "window.InterpreteArchive.snapshot().transcript[0].text.includes('dernière phrase')"));
+            // Replace only Android's document picker; the real archive bridge and writer run.
+            java.io.File archive = new java.io.File(app.getFilesDir(), "test-interview.html");
+            android.app.Instrumentation instrumentation = InstrumentationRegistry.getInstrumentation();
+            android.app.Instrumentation.ActivityMonitor picker = instrumentation.addMonitor(
+                new android.content.IntentFilter(Intent.ACTION_CREATE_DOCUMENT),
+                new android.app.Instrumentation.ActivityResult(android.app.Activity.RESULT_OK,
+                    new Intent().setData(android.net.Uri.fromFile(archive))), true);
+            try {
+                js(scenario, "document.getElementById('archive-button').click();document.getElementById('export-html').click();true");
+                until(scenario, "!document.getElementById('android-archive-preview').hidden");
+                assertEquals(1, picker.getHits());
+                String html = new String(java.nio.file.Files.readAllBytes(archive.toPath()), java.nio.charset.StandardCharsets.UTF_8);
+                assertTrue(html.contains("dernière phrase enregistrée"));
+                assertTrue(html.contains("Carte des connexions"));
+                assertFalse(html.contains("fake-key-used-only"));
+                assertEquals(html, app.lastArchive);
+            } finally { instrumentation.removeMonitor(picker); archive.delete(); }
+            js(scenario, "document.getElementById('archive-button').click();true");
             js(scenario, "document.getElementById('status').textContent='Démonstration · réponses simulées';document.getElementById('settings-button').click();true");
             InstrumentationRegistry.getInstrumentation().getUiAutomation().takeScreenshot().compress(android.graphics.Bitmap.CompressFormat.PNG, 100, new java.io.FileOutputStream(new java.io.File(app.getExternalFilesDir(null), "android-demo.png")));
         } finally { app.stopService(new Intent(app, AssistantService.class)); }

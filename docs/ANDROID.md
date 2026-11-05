@@ -4,7 +4,7 @@ L’APK cible **Android 8.0 ou ultérieur**, avec Android System WebView à jour
 
 ## Installer
 
-Téléchargez `Interprete-0.3.0-android.apk` depuis la version GitHub publiée, puis ouvrez-le sur votre téléphone. Android peut demander d’autoriser l’installation depuis le navigateur ou le gestionnaire de fichiers utilisé. Il s’agit d’une installation manuelle, pas d’une application publiée sur Google Play.
+Téléchargez [Interprete-0.3.0-android.apk](https://github.com/grecdel/Interprete/releases/download/v0.3.0/Interprete-0.3.0-android.apk), puis ouvrez-le sur votre téléphone. Android peut demander d’autoriser l’installation depuis le navigateur ou le gestionnaire de fichiers utilisé. Il s’agit d’une installation manuelle, pas d’une application publiée sur Google Play.
 
 L’APK est signé avec l’identité privée du projet. Son certificat public se trouve dans `android/signing-certificate.der` ; les empreintes du téléchargement accompagnent la version publiée. Une mise à jour doit conserver la même signature pour préserver l’installation et ses données.
 

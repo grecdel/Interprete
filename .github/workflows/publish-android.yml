@@ -1,0 +1,55 @@
+name: Attach signed Android APK
+on:
+  push:
+    branches: ['delivery/android-*']
+    paths: ['release-assets/**']
+permissions:
+  contents: write
+  actions: read
+jobs:
+  upload:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 10
+    env:
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - name: Validate build provenance and release draft
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import json,os,re,subprocess
+          from pathlib import Path
+          meta=json.loads(Path('release-assets/metadata.json').read_text())
+          assert meta['version']=='0.3.0'
+          assert re.fullmatch('[0-9a-f]{40}',meta['source_commit'])
+          assert re.fullmatch('[0-9]+',str(meta['build_run']))
+          repo=os.environ['GITHUB_REPOSITORY']
+          run=json.loads(subprocess.check_output(['gh','api',f'repos/{repo}/actions/runs/{meta["build_run"]}']))
+          assert run['conclusion']=='success' and run['event']=='push'
+          assert run['head_repository']['full_name']==repo
+          assert run['path']=='.github/workflows/build-android.yml'
+          assert run['head_sha']==meta['source_commit']
+          subprocess.run(['git','merge-base','--is-ancestor',meta['source_commit'],'origin/main'],check=True)
+          release=json.loads(subprocess.check_output(['gh','release','view','v0.3.0','--repo',repo,'--json','isDraft,targetCommitish']))
+          assert release['isDraft'], 'Ne pas modifier une version déjà publiée.'
+          assert release['targetCommitish']==meta['source_commit']
+          with open(os.environ['GITHUB_ENV'],'a') as env:
+              env.write(f'BUILD_RUN={meta["build_run"]}\n')
+          PY
+      - name: Retrieve the existing tested APK
+        run: gh run download "$BUILD_RUN" --repo "$GITHUB_REPOSITORY" --name Interprete-Android-unsigned --dir tested-build
+      - name: Check signature and compare all application files
+        run: python3 scripts/verify_android_release.py --unsigned-dir tested-build --signed-dir release-assets
+      - name: Attach public files to the release draft
+        run: |
+          gh release upload v0.3.0 --repo "$GITHUB_REPOSITORY" \
+            release-assets/Interprete-0.3.0-android.apk \
+            release-assets/SHA256SUMS \
+            release-assets/SIGNATURE.txt
