@@ -58,3 +58,15 @@ La fresque présente une scène par séquence : bande chronologique, locuteurs, 
 ## Conditions de qualité
 
 La popularité d’un domaine et l’assurance du modèle ne prouvent pas une affirmation. Une preuve doit conserver son origine, sa date, son passage pertinent et ses limites. Signaler les propos mal entendus, les extraits manquants et les recherches incomplètes. Aucun dispositif ne garantit une fiabilité journalistique infaillible.
+
+## Tableau « enquête » ajouté au code
+
+Le thème Enquête est sélectionnable dans l’application et dans la carte du compte rendu HTML. Il comprend un tableau en liège, des fiches papier, des dossiers, des punaises, des fils rouges et des photos importées présentées en Polaroïd. Les étiquettes des liens restent consultables : les fils rouges ne signifient pas tous une contradiction.
+
+La barre de recherche ignore la casse et les accents et recherche dans les propos, les catégories et les textes des pièces. Les commandes permettent de zoomer, de revenir à une vue d’ensemble et d’isoler les liens ou les incohérences potentielles.
+
+Un sélecteur permet d’importer des pièces dans la carte. Sélectionner d’abord une fiche associe explicitement les pièces à cette fiche. Dans cette vue autonome, ces imports restent temporaires ; le dossier d’enquête de l’application fournit la conservation locale, les annotations et l’export des originaux. Les miniatures des photos importées dans le dossier sont incorporées au compte rendu ; les binaires originaux restent séparés.
+
+L’ambiance jazzy est une petite boucle instrumentale synthétisée localement avec Web Audio. Elle démarre uniquement au clic, se coupe au changement d’ambiance ou lorsque la page est masquée, et ne demande aucun service musical externe.
+
+Validation : tests navigateur de recherche, import texte/photo, association explicite et lecture/arrêt de l’ambiance ; suite Python et bureau ; compilation locale du code Java Android. Ces changements ne sont pas encore dans l’APK v0.3.0 publié. Les autres évolutions approuvées (dont l’audio long et les connecteurs API) restent à implémenter.

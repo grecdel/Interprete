@@ -85,6 +85,7 @@ public final class MainActivity extends Activity implements InterpreteApp.EventS
             @Override public boolean onShowFileChooser(WebView view, ValueCallback<Uri[]> callback, FileChooserParams params) {
                 if (filePicker != null) filePicker.onReceiveValue(null); filePicker = callback;
                 Intent choose = new Intent(Intent.ACTION_OPEN_DOCUMENT).addCategory(Intent.CATEGORY_OPENABLE).setType(java.util.Arrays.asList(params.getAcceptTypes()).contains("application/json") ? "application/json" : "*/*");
+                choose.putExtra(Intent.EXTRA_ALLOW_MULTIPLE, params.getMode() == FileChooserParams.MODE_OPEN_MULTIPLE);
                 try { startActivityForResult(choose, IMPORT); } catch (Exception ignored) { filePicker.onReceiveValue(null); filePicker = null; }
                 return true;
             }
@@ -220,7 +221,16 @@ public final class MainActivity extends Activity implements InterpreteApp.EventS
     }
     @Override protected void onActivityResult(int requestCode, int resultCode, Intent data) {
         super.onActivityResult(requestCode, resultCode, data);
-        if (requestCode == IMPORT && filePicker != null) { filePicker.onReceiveValue(resultCode == RESULT_OK && data != null && data.getData() != null ? new Uri[]{data.getData()} : null); filePicker = null; }
+        if (requestCode == IMPORT && filePicker != null) {
+            Uri[] selected = null;
+            if (resultCode == RESULT_OK && data != null) {
+                if (data.getClipData() != null) {
+                    int count = Math.min(32, data.getClipData().getItemCount()); selected = new Uri[count];
+                    for (int i=0;i<count;i++) selected[i]=data.getClipData().getItemAt(i).getUri();
+                } else if (data.getData() != null) selected = new Uri[]{data.getData()};
+            }
+            filePicker.onReceiveValue(selected); filePicker = null;
+        }
         if (requestCode == ARCHIVE && archiveRequest != null) {
             JSONObject saved = archiveRequest; String id = archiveId; archiveRequest = null; archiveId = null;
             if (resultCode != RESULT_OK || data == null || data.getData() == null) { app.resolve(id, Json.object("saved", false)); return; }
@@ -240,7 +250,7 @@ public final class MainActivity extends Activity implements InterpreteApp.EventS
         android.app.Dialog dialog = new android.app.Dialog(this, android.R.style.Theme_Material_Light_NoActionBar);
         android.widget.LinearLayout root = new android.widget.LinearLayout(this); root.setOrientation(android.widget.LinearLayout.VERTICAL);
         root.setBackgroundColor(Color.rgb(247,246,249));
-        WebView viewer = new WebView(this); viewer.getSettings().setJavaScriptEnabled(true); viewer.getSettings().setAllowFileAccess(false); viewer.getSettings().setAllowContentAccess(false);
+        WebView viewer = new WebView(this); viewer.setWebChromeClient(web.getWebChromeClient()); viewer.getSettings().setJavaScriptEnabled(true); viewer.getSettings().setAllowFileAccess(false); viewer.getSettings().setAllowContentAccess(false);
         viewer.getSettings().setMixedContentMode(WebSettings.MIXED_CONTENT_NEVER_ALLOW);
         viewer.setWebViewClient(new WebViewClient() {
             @Override public boolean shouldOverrideUrlLoading(WebView view, WebResourceRequest request) { if (request.getUrl().toString().startsWith("https://archive.interprete.local/#")) return false; openExternal(request.getUrl()); return true; }

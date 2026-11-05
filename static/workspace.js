@@ -47,6 +47,7 @@
           await save({...record, notes: notes.value, source: value, claim_id: claims.value}); status.textContent = 'Annotations conservées localement.';
         } catch (error) { status.textContent = error.message; }
       });
+      if (record.thumbnail && /^data:image\/jpeg;base64,[A-Za-z0-9+/=]+$/.test(record.thumbnail)) { const image=el('img'); image.src=record.thumbnail; image.alt='Aperçu de ' + record.name; image.className='evidence-photo'; card.append(image); }
       const preview = el('details'); preview.append(el('summary', 'Consulter le texte extrait'));
       preview.append(el('pre', record.text || 'Pas d’extraction de texte pour ce format. L’original reste conservé localement. OCR et extraction PDF ne sont pas encore intégrés.'));
       const use = button('Préparer une vérification', () => {
@@ -109,7 +110,14 @@
         if ([...records.values()].some(r => r.sha256 === sha256)) { status.textContent = `${file.name} est déjà présent (contenu identique).`; continue; }
         const textual = /\.(txt|md|csv|json|srt|vtt|log)$/i.test(file.name) || /^text\//.test(file.type);
         const text = textual ? new TextDecoder().decode(bytes).slice(0, 200000) : '';
-        await save({id:'evidence_' + crypto.randomUUID(), name:file.name, type:file.type, size:file.size, sha256, collected_at:new Date().toISOString(), source:typeof imported.source === 'string' ? imported.source.slice(0, 2000) : '', notes:typeof imported.notes === 'string' ? imported.notes.slice(0, 10000) : '', claim_id:'', text, text_truncated:textual && new TextDecoder().decode(bytes).length > 200000, blob:file});
+        let thumbnail = '';
+        if (/^image\/(png|jpeg|webp)$/.test(file.type)) {
+          const encoded = await new Promise((resolve,reject) => { const reader=new FileReader();reader.onload=()=>resolve(reader.result);reader.onerror=reject;reader.readAsDataURL(file); });
+          const image = new Image(); image.src=encoded; await image.decode();
+          const canvas=document.createElement('canvas'), scale=Math.min(1,320/image.width,200/image.height);
+          canvas.width=Math.max(1,Math.round(image.width*scale)); canvas.height=Math.max(1,Math.round(image.height*scale)); canvas.getContext('2d').drawImage(image,0,0,canvas.width,canvas.height); thumbnail=canvas.toDataURL('image/jpeg',.75);
+        }
+        await save({id:'evidence_' + crypto.randomUUID(), name:file.name, type:file.type, size:file.size, sha256, collected_at:new Date().toISOString(), source:typeof imported.source === 'string' ? imported.source.slice(0, 2000) : '', notes:typeof imported.notes === 'string' ? imported.notes.slice(0, 10000) : '', claim_id:'', thumbnail, text, text_truncated:textual && new TextDecoder().decode(bytes).length > 200000, blob:file});
         status.textContent = `${file.name} conservé localement. ${textual ? 'Texte consultable (200 000 caractères maximum).' : 'Original conservé, extraction non disponible.'}`;
       }
     } catch (error) { status.textContent = error.message || 'Import impossible.'; }

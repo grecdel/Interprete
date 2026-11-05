@@ -500,7 +500,7 @@ refreshConfiguration().then(() => { scheduleLive(); if (desktop && !configured) 
 
 // Appearance preferences contain no interview data or API credentials.
 (() => {
-  const themes = {pastel: 'Pastel', dark: 'Sombre', matrix: 'Matrix'};
+  const themes = {pastel: 'Pastel', dark: 'Sombre', matrix: 'Matrix', investigation: 'Enquête'};
   const label = document.createElement('label'); label.className = 'theme-control';
   label.textContent = 'Ambiance ';
   const select = document.createElement('select'); select.setAttribute('aria-label', 'Thème de l’interface');

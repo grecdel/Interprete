@@ -96,3 +96,11 @@ Les tests simulent les réponses de recherche et l’audio. Ils valident le fonc
 Le bouton **Dossier d’enquête** ouvre une bibliothèque locale de pièces : import, recherche dans les textes simples, annotations, provenance, empreintes SHA-256 et association aux affirmations. Chaque pièce peut être exportée avec son original dans un conteneur JSON réimportable. Le compte rendu conserve aussi l’inventaire et les annotations. Aucun fichier n’est envoyé automatiquement aux services de recherche.
 
 Le [catalogue d’intégrations OSINT](docs/OSINT.md) détaille les outils proposés, leurs accès et les étapes d’intégration. Cette évolution du code n’est pas encore incorporée à l’APK v0.3.0 publié ; les connecteurs API, l’OCR, l’audio long et la fresque sont encore à développer.
+
+## Tableau d’enquête — évolution du code
+
+Le compte rendu propose désormais une ambiance **Enquête** : liège, dossiers, photos façon Polaroïd, fils rouges, recherche, import de pièces et vue d’ensemble. Une ambiance jazzy locale s’active au clic. Les pièces ajoutées directement à la carte sont temporaires ; utilisez le dossier d’enquête pour les conserver.
+
+![Tableau enquête avec données fictives, imports et connexions](docs/assets/investigation-board.png)
+
+Ce changement de code n’est pas encore inclus dans l’APK publié. [Fonctionnement et état des évolutions](docs/EVOLUTION.md).

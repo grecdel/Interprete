@@ -179,3 +179,7 @@ body, .android-mode { background:var(--canvas); }
 .evidence-list article { border-top:1px solid var(--line); padding:18px 0; }
 .evidence-list label { display:block; font-size:12px; margin-top:12px; }
 .evidence-list pre { white-space:pre-wrap; overflow-wrap:anywhere; max-height:300px; overflow:auto; font-size:12px; }
+:root[data-theme=investigation] { --surface:#fff8e8; --canvas:#e9dfca; --ink:#3f3026; --muted:#79644d; --line:#d9c6a4; --accent:#96353a; --bloom-a:#e8c789; --bloom-b:#b56c51; --bloom-c:#883b44; }
+[data-theme=investigation] .assistant-panel { box-shadow:0 15px 45px #4b321b24; }
+[data-theme=investigation] .theme-control { border-bottom:1px solid var(--line); }
+.evidence-photo { display:block; max-width:260px; max-height:180px; border:8px solid #fff; border-bottom-width:24px; box-shadow:1px 3px 10px #30201030; margin:16px 0; }
