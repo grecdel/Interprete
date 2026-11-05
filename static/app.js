@@ -497,3 +497,44 @@ if (desktop) {
 window.addEventListener('pagehide', stopListening);
 updateComposer();
 refreshConfiguration().then(() => { scheduleLive(); if (desktop && !configured) toggleSettings(true); });
+
+// Appearance preferences contain no interview data or API credentials.
+(() => {
+  const themes = {pastel: 'Pastel', dark: 'Sombre', matrix: 'Matrix'};
+  const label = document.createElement('label'); label.className = 'theme-control';
+  label.textContent = 'Ambiance ';
+  const select = document.createElement('select'); select.setAttribute('aria-label', 'Thème de l’interface');
+  for (const [value, text] of Object.entries(themes)) {
+    const option = document.createElement('option'); option.value = value; option.textContent = text; select.append(option);
+  }
+  function apply(value) {
+    const theme = Object.hasOwn(themes, value) ? value : 'pastel';
+    document.documentElement.dataset.theme = theme; select.value = theme;
+    document.querySelector('meta[name="theme-color"]')?.setAttribute('content', theme === 'pastel' ? '#f3eff9' : theme === 'matrix' ? '#030c08' : '#10131d');
+  }
+  let saved = 'pastel'; try { saved = localStorage.getItem('interprete-theme') || saved; } catch {}
+  apply(saved);
+  select.onchange = () => { apply(select.value); try { localStorage.setItem('interprete-theme', select.value); } catch {} };
+  label.append(select); document.querySelector('.panel-header').after(label);
+})();
+
+(() => {
+  const tools = document.createElement('details'); tools.className = 'osint-tools';
+  const title = document.createElement('summary'); title.textContent = 'Atelier OSINT · rechercher des sources'; tools.append(title);
+  const note = document.createElement('p'); note.textContent = 'Au clic, le texte saisi est transmis à Google pour rechercher dans le site choisi. Les résultats restent à examiner ; ils ne constituent pas une validation.'; tools.append(note);
+  const providers = [
+    ['INSEE', 'site:insee.fr'], ['Eurostat', 'site:ec.europa.eu/eurostat'],
+    ['Légifrance', 'site:legifrance.gouv.fr'], ['Vie publique', 'site:vie-publique.fr'],
+    ['AFP Factuel', 'site:factuel.afp.com'], ['Publications scientifiques', 'site:pubmed.ncbi.nlm.nih.gov']
+  ];
+  const links = document.createElement('div');
+  for (const [name, scope] of providers) {
+    const link = document.createElement('a'); link.textContent = name; link.target = '_blank'; link.rel = 'noopener noreferrer';
+    link.href = 'https://www.google.com/search?q=' + encodeURIComponent(scope);
+    link.addEventListener('click', () => {
+      const query = document.getElementById('transcript').value.trim().slice(0, 600);
+      link.href = 'https://www.google.com/search?q=' + encodeURIComponent(scope + ' ' + query);
+    }); links.append(link);
+  }
+  tools.append(links); document.querySelector('.composer').after(tools);
+})();
