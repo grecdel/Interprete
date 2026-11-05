@@ -307,5 +307,58 @@ class BrowserChecks(unittest.TestCase):
         expect(self.page.locator('.evidence-list textarea')).to_have_value('Passage à vérifier : 120 millions.')
 
 
+    def test_direct_osint_notice_can_be_kept_without_verifying_it(self):
+        self.page.route('**/api/osint',lambda route:route.fulfill(json={'provider':'crossref','query':'budget','retrieved_at':'2026-01-01T12:00:00Z','results':[{'title':'Publication de test','url':'https://doi.org/10.1/test','description':'Métadonnées de démonstration','provider':'crossref'}]}))
+        self.page.locator('.workspace-open').click()
+        expect(self.page.locator('#evidence-files')).to_be_enabled()
+        self.page.get_by_role('searchbox',name='Recherche OSINT directe').fill('budget')
+        self.page.get_by_role('button',name='Interroger cette source').click()
+        expect(self.page.get_by_role('link',name='Publication de test')).to_be_visible()
+        self.page.get_by_role('button',name='Conserver cette notice dans le dossier').click()
+        expect(self.page.locator('.evidence-list article')).to_have_count(1)
+        self.assertEqual(self.requests,[])
+        snapshot=self.page.evaluate('InterpreteArchive.snapshot()')
+        self.assertEqual(snapshot['evidence'][0]['source'],'https://doi.org/10.1/test')
+        self.assertIn('non_verifiee',snapshot['evidence'][0]['text'])
+
+    def test_pdf_and_image_ocr_are_processed_locally(self):
+        import base64
+        objects=[b'<< /Type /Catalog /Pages 2 0 R >>',b'<< /Type /Pages /Kids [3 0 R] /Count 1 >>',b'<< /Type /Page /Parent 2 0 R /MediaBox [0 0 600 200] /Resources << /Font << /F1 4 0 R >> >> /Contents 5 0 R >>',b'<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>']
+        stream=b'BT /F1 24 Tf 30 100 Td (Budget 120 millions) Tj ET'
+        objects.append(b'<< /Length '+str(len(stream)).encode()+b' >>\nstream\n'+stream+b'\nendstream')
+        pdf=b'%PDF-1.4\n'; offsets=[0]
+        for index,obj in enumerate(objects,1):
+            offsets.append(len(pdf));pdf+=str(index).encode()+b' 0 obj\n'+obj+b'\nendobj\n'
+        xref=len(pdf);pdf+=b'xref\n0 6\n0000000000 65535 f \n'+b''.join(f'{offset:010d} 00000 n \n'.encode() for offset in offsets[1:])+b'trailer\n<< /Size 6 /Root 1 0 R >>\nstartxref\n'+str(xref).encode()+b'\n%%EOF'
+        self.page.locator('.workspace-open').click()
+        expect(self.page.locator('#evidence-files')).to_be_enabled()
+        self.page.locator('#evidence-files').set_input_files({'name':'document.pdf','mimeType':'application/pdf','buffer':pdf})
+        card=self.page.locator('.evidence-list article').filter(has=self.page.get_by_role('heading',name='document.pdf',exact=True))
+        card.get_by_role('button',name='Extraire le texte · PDF / OCR local').click()
+        expect(card.locator('pre')).to_contain_text('Budget 120 millions',timeout=30000)
+        png=self.page.evaluate("""() => {const c=document.createElement('canvas');c.width=900;c.height=160;const x=c.getContext('2d');x.fillStyle='white';x.fillRect(0,0,900,160);x.fillStyle='black';x.font='bold 48px Arial';x.fillText('BUDGET 120 MILLIONS',30,95);return c.toDataURL('image/png').split(',')[1];}""")
+        self.page.locator('#evidence-files').set_input_files({'name':'ocr.png','mimeType':'image/png','buffer':base64.b64decode(png)})
+        card=self.page.locator('.evidence-list article').filter(has=self.page.get_by_role('heading',name='ocr.png',exact=True))
+        card.get_by_role('button',name='Extraire le texte · PDF / OCR local').click()
+        expect(card.locator('pre')).to_contain_text('120',timeout=60000)
+        self.assertEqual(self.requests,[])
+
+
+    def test_local_reading_tools_do_not_send_interview_content(self):
+        self.page.locator('.analysis-tools summary').click()
+        self.page.get_by_role('textbox',name='Texte à décrypter').fill('Un effet de base explique la désinflation.')
+        self.page.get_by_role('button',name='Expliquer le jargon présent').click()
+        expect(self.page.locator('.analysis-tools')).to_contain_text('Ralentissement de la hausse des prix')
+        self.page.get_by_role('textbox',name='Valeur initiale',exact=True).fill('100')
+        self.page.get_by_role('textbox',name='Valeur finale',exact=True).fill('120')
+        self.page.get_by_role('button',name='Calculer la variation').click()
+        expect(self.page.locator('.analysis-tools')).to_contain_text('20 %')
+        self.page.get_by_role('textbox',name='Citation à retrouver').fill('Le budget augmente.')
+        self.page.get_by_role('textbox',name='Document de comparaison').fill('Introduction. Le budget augmente. Conclusion.')
+        self.page.get_by_role('button',name='Comparer les textes').click()
+        expect(self.page.locator('.analysis-tools')).to_contain_text('Correspondance textuelle trouvée')
+        self.assertEqual(self.requests,[])
+
+
 if __name__ == '__main__':
     unittest.main()

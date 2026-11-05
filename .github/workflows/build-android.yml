@@ -7,6 +7,7 @@ on:
       - 'android/**'
       - 'static/**'
       - 'server.py'
+      - 'osint.py'
       - 'scripts/prepare_android.py'
       - '.github/workflows/build-android.yml'
 concurrency:
@@ -44,7 +45,7 @@ jobs:
       - name: Align APK and collect signing tool
         run: |
           mkdir -p android-output
-          "$ANDROID_HOME/build-tools/36.0.0/zipalign" -P 16 -f 4 android/app/build/outputs/apk/release/app-release-unsigned.apk android-output/Interprete-0.3.0-unsigned.apk
+          "$ANDROID_HOME/build-tools/36.0.0/zipalign" -P 16 -f 4 android/app/build/outputs/apk/release/app-release-unsigned.apk android-output/Interprete-0.4.0-unsigned.apk
           cp "$ANDROID_HOME/build-tools/36.0.0/lib/apksigner.jar" android-output/
           cp android/app/build/outputs/apk/debug/app-debug.apk android-output/
           cp android/app/build/outputs/apk/androidTest/debug/app-debug-androidTest.apk android-output/

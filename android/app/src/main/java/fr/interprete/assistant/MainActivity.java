@@ -41,6 +41,7 @@ public final class MainActivity extends Activity implements InterpreteApp.EventS
     private WebView web;
     private boolean ready, startOnOpen, unsaved;
     private String microphoneRequest;
+    private JSONObject microphoneOptions=new JSONObject();
     private JSONObject archiveRequest;
     private String archiveId;
     private ValueCallback<Uri[]> filePicker;
@@ -66,11 +67,11 @@ public final class MainActivity extends Activity implements InterpreteApp.EventS
                 Uri uri = request.getUrl();
                 if (!"https".equals(uri.getScheme()) || !"app.interprete.local".equals(uri.getHost())) return blocked();
                 String filename = uri.getPath(); if (filename == null || filename.equals("/")) filename = "index.html"; else filename = filename.substring(1);
-                if (!java.util.Arrays.asList("index.html", "style.css", "app.js", "archive.js", "capture.js", "workspace.js", "android.js", "android.css").contains(filename)) return blocked();
+                if (!java.util.Arrays.asList("index.html", "style.css", "app.js", "archive.js", "capture.js", "workspace.js", "documents.js", "analysis-tools.js", "android.js", "android.css").contains(filename) && !(filename.startsWith("vendor/") && !filename.contains("..") && filename.matches("[A-Za-z0-9_./-]+"))) return blocked();
                 try {
-                    String mime = filename.endsWith(".js") ? "text/javascript" : filename.endsWith(".css") ? "text/css" : "text/html";
+                    String mime = (filename.endsWith(".js") || filename.endsWith(".mjs")) ? "text/javascript" : filename.endsWith(".css") ? "text/css" : filename.endsWith(".wasm") ? "application/wasm" : filename.endsWith(".html") ? "text/html" : "application/octet-stream";
                     Map<String,String> headers = new HashMap<>();
-                    headers.put("Content-Security-Policy", "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'none'; object-src 'none'; frame-src 'none'");
+                    headers.put("Content-Security-Policy", "default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; worker-src 'self' blob:; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self'; object-src 'none'; frame-src 'none'");
                     headers.put("X-Content-Type-Options", "nosniff");
                     return new WebResourceResponse(mime, "UTF-8", 200, "OK", headers, getAssets().open("web/" + filename));
                 } catch (Exception ignored) { return blocked(); }
@@ -157,6 +158,10 @@ public final class MainActivity extends Activity implements InterpreteApp.EventS
             case "request":
                 String apiPath = data.optString("path");
                 if ("/api/status".equals(apiPath)) app.resolve(id, Json.object("ok", true, "status", 200, "body", Json.object("configured", !app.vault.get().isEmpty())));
+                else if ("/api/osint".equals(apiPath) && data.optJSONObject("body") != null && data.toString().length() <= 4096) {
+                    network.execute(() -> { try { app.resolve(id,Json.object("ok",true,"status",200,"body",OsintSearch.search(data.getJSONObject("body")))); }
+                        catch(Exception error) { app.resolve(id,Json.object("ok",false,"status",502,"body",Json.object("error",MicrophoneEngine.safeMessage(error)))); } });
+                }
                 else if ("/api/verify".equals(apiPath) && data.optJSONObject("body") != null && data.toString().length() <= 260000) {
                     network.execute(() -> { try { app.resolve(id, Json.object("ok", true, "status", 200, "body", app.api().verify(data.optJSONObject("body")))); }
                         catch (Exception error) { app.resolve(id, Json.object("ok", false, "status", 502, "body", Json.object("error", MicrophoneEngine.safeMessage(error)))); } });
@@ -164,17 +169,21 @@ public final class MainActivity extends Activity implements InterpreteApp.EventS
                 break;
             case "settings": app.resolve(id, Json.object("canRemember", app.vault.available(), "hasSavedKey", app.vault.remembered(), "overlayEnabled", getSharedPreferences("preferences", MODE_PRIVATE).getBoolean("overlay", false) && Settings.canDrawOverlays(this))); break;
             case "saveKey": network.execute(() -> { try { app.vault.save(data.optString("key"), data.optBoolean("remember")); app.resolve(id, Json.object("configured", true)); } catch (Exception error) { app.reject(id, MicrophoneEngine.safeMessage(error)); } }); break;
-            case "startMic": requestMicrophone(id); break;
+            case "startMic": microphoneOptions=data; requestMicrophone(id); break;
+            case "audioInventory": network.execute(()->{try{app.resolve(id,Json.object("clips",app.audioStore.inventory()));}catch(Exception error){app.reject(id,"Inventaire indisponible.");}});break;
+            case "clearAudio": if(app.service!=null){app.reject(id,"Arrêtez l’assistant avant de supprimer les audios.");break;} app.audioStore.clear();app.resolve(id,new JSONObject());break;
             case "stopMic": if (app.service != null) app.service.stopMic(() -> app.resolve(id, new JSONObject())); else app.resolve(id, new JSONObject()); break;
             case "panel": if (!data.optBoolean("open")) moveTaskToBack(true); app.resolve(id, new JSONObject()); break;
             case "unsaved": unsaved = data.optBoolean("value"); app.resolve(id, new JSONObject()); break;
             case "overlay": setOverlay(id, data.optBoolean("enable")); break;
+            case "audioBundle":
             case "archive":
                 if (archiveRequest != null) { app.reject(id, "Un enregistrement est déjà en cours."); break; }
-                String ext = data.optString("extension");
-                if (!ext.equals("html") && !ext.equals("json")) { app.reject(id, "Format d’archive refusé."); break; }
+                String ext = action.equals("audioBundle")?"zip":data.optString("extension");
+                data.put("extension",ext);
+                if (!ext.equals("html") && !ext.equals("json") && !ext.equals("zip")) { app.reject(id, "Format d’archive refusé."); break; }
                 archiveRequest = data; archiveId = id;
-                Intent save = new Intent(Intent.ACTION_CREATE_DOCUMENT).addCategory(Intent.CATEGORY_OPENABLE).setType(ext.equals("html") ? "text/html" : "application/json");
+                Intent save = new Intent(Intent.ACTION_CREATE_DOCUMENT).addCategory(Intent.CATEGORY_OPENABLE).setType(ext.equals("html") ? "text/html" : ext.equals("zip")?"application/zip":"application/json");
                 save.putExtra(Intent.EXTRA_TITLE, "interprete-" + java.time.LocalDate.now() + "." + ext); startActivityForResult(save, ARCHIVE); break;
             case "viewArchive": showArchive(); app.resolve(id, new JSONObject()); break;
             case "copy":
@@ -186,7 +195,8 @@ public final class MainActivity extends Activity implements InterpreteApp.EventS
         }
     }
     private void requestMicrophone(String id) {
-        if (app.vault.get().isEmpty()) { app.reject(id, "Ajoutez votre clé API dans les réglages."); return; }
+        if(microphoneOptions.optBoolean("record_only")&&!microphoneOptions.optBoolean("retain_audio",true)){app.reject(id,"Activez la conservation audio pour enregistrer hors ligne.");return;}
+        if (app.vault.get().isEmpty() && !microphoneOptions.optBoolean("record_only")) { app.reject(id, "Ajoutez votre clé API dans les réglages."); return; }
         if (microphoneRequest != null) { app.reject(id, "Une autorisation du micro est déjà en cours."); return; }
         boolean notification = Build.VERSION.SDK_INT >= 33 && !getPreferences(MODE_PRIVATE).getBoolean("notification_asked", false);
         if (checkSelfPermission(Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED || notification) {
@@ -196,7 +206,7 @@ public final class MainActivity extends Activity implements InterpreteApp.EventS
         } else beginMicrophone(id);
     }
     private void beginMicrophone(String id) {
-        try { startForegroundService(new Intent(this, AssistantService.class).setAction(AssistantService.START_MIC).putExtra("request_id", id)); }
+        try { startForegroundService(new Intent(this, AssistantService.class).setAction(AssistantService.START_MIC).putExtra("request_id", id).putExtra("retain_audio",microphoneOptions.optBoolean("retain_audio",true)).putExtra("record_only",microphoneOptions.optBoolean("record_only")).putExtra("duration_ms",microphoneOptions.optLong("duration_ms",180*60*1000L))); }
         catch (RuntimeException error) { app.reject(id, "Gardez Interprete ouvert pour démarrer le micro."); }
     }
     @Override public void onRequestPermissionsResult(int requestCode, String[] permissions, int[] results) {
@@ -238,7 +248,17 @@ public final class MainActivity extends Activity implements InterpreteApp.EventS
             network.execute(() -> {
                 try (OutputStream output = getContentResolver().openOutputStream(destination, "wt")) {
                     if (output == null) throw new IllegalStateException("Fichier indisponible.");
-                    output.write(saved.optString("content").getBytes(StandardCharsets.UTF_8));
+                    if("zip".equals(saved.optString("extension"))) {
+                        org.json.JSONArray clips=saved.optJSONArray("clips");
+                        if(clips==null||clips.length()>10000)throw new IllegalArgumentException("Inventaire audio invalide.");
+                        try(java.util.zip.ZipOutputStream zip=new java.util.zip.ZipOutputStream(output)) {
+                            zip.putNextEntry(new java.util.zip.ZipEntry("index.html"));zip.write(saved.optString("content").getBytes(StandardCharsets.UTF_8));zip.closeEntry();
+                            zip.putNextEntry(new java.util.zip.ZipEntry("session.json"));zip.write(saved.optString("session").getBytes(StandardCharsets.UTF_8));zip.closeEntry();
+                            java.util.HashSet<String> seen=new java.util.HashSet<>();
+                            for(int i=0;i<clips.length();i++) {String clip=clips.getString(i);if(!seen.add(clip))continue;java.io.File source=app.audioStore.file(clip);if(!source.isFile())throw new IllegalStateException("Extrait audio manquant.");zip.putNextEntry(new java.util.zip.ZipEntry("audio/"+clip+".wav"));try(java.io.FileInputStream stream=new java.io.FileInputStream(source)){byte[] buffer=new byte[32768];int count;while((count=stream.read(buffer))!=-1)zip.write(buffer,0,count);}zip.closeEntry();}
+                        }
+                        app.lastArchive=saved.optString("content");
+                    } else output.write(saved.optString("content").getBytes(StandardCharsets.UTF_8));
                     if ("html".equals(saved.optString("extension"))) app.lastArchive = saved.optString("content");
                     app.resolve(id, Json.object("saved", true));
                 } catch (Exception ignored) { app.reject(id, "L’archive n’a pas pu être enregistrée. La session reste disponible."); }
@@ -254,9 +274,16 @@ public final class MainActivity extends Activity implements InterpreteApp.EventS
         viewer.getSettings().setMixedContentMode(WebSettings.MIXED_CONTENT_NEVER_ALLOW);
         viewer.setWebViewClient(new WebViewClient() {
             @Override public boolean shouldOverrideUrlLoading(WebView view, WebResourceRequest request) { if (request.getUrl().toString().startsWith("https://archive.interprete.local/#")) return false; openExternal(request.getUrl()); return true; }
-            @Override public WebResourceResponse shouldInterceptRequest(WebView view, WebResourceRequest request) { return blocked(); }
+            @Override public WebResourceResponse shouldInterceptRequest(WebView view, WebResourceRequest request) {
+                Uri uri=request.getUrl();String path=uri.getPath();
+                if("https".equals(uri.getScheme())&&"archive.interprete.local".equals(uri.getHost())&&path!=null&&path.startsWith("/audio/")&&path.endsWith(".wav"))try {
+                    java.io.File audio=app.audioStore.file(path.substring(7,path.length()-4));
+                    return new WebResourceResponse("audio/wav",null,new java.io.FileInputStream(audio));
+                }catch(Exception ignored){}
+                return blocked();
+            }
         });
-        String html = app.lastArchive.replace("<head>", "<head><meta http-equiv=\"Content-Security-Policy\" content=\"default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; img-src data:;\"><style>#print{display:none}</style>");
+        String html = app.lastArchive.replace("<head>", "<head><meta http-equiv=\"Content-Security-Policy\" content=\"default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; img-src data:; media-src 'self';\"><style>#print{display:none}</style>");
         viewer.loadDataWithBaseURL("https://archive.interprete.local/", html, "text/html", "UTF-8", null);
         root.addView(viewer, new android.widget.LinearLayout.LayoutParams(-1, 0, 1));
         android.widget.Button close = new android.widget.Button(this); close.setText(R.string.close_archive); close.setOnClickListener(view -> dialog.dismiss()); root.addView(close);

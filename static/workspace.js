@@ -49,7 +49,18 @@
       });
       if (record.thumbnail && /^data:image\/jpeg;base64,[A-Za-z0-9+/=]+$/.test(record.thumbnail)) { const image=el('img'); image.src=record.thumbnail; image.alt='Aperçu de ' + record.name; image.className='evidence-photo'; card.append(image); }
       const preview = el('details'); preview.append(el('summary', 'Consulter le texte extrait'));
-      preview.append(el('pre', record.text || 'Pas d’extraction de texte pour ce format. L’original reste conservé localement. OCR et extraction PDF ne sont pas encore intégrés.'));
+      preview.append(el('pre', record.text || 'Texte non extrait. Pour un PDF ou une image, utilisez le bouton d’extraction locale. L’original reste conservé.'));
+      if(record.type==='application/pdf'||/\.pdf$/i.test(record.name)||/^image\/(png|jpeg|webp)$/.test(record.type)) {
+        const extract=button('Extraire le texte · PDF / OCR local',async()=>{
+          extract.disabled=true;
+          try {
+            const result=await window.InterpreteDocuments.extract(record.blob,message=>{status.textContent=message;});
+            await save({...record,...result});
+            status.textContent=(result.text.trim()?'Texte extrait localement. ':'Aucun texte détecté. ')+(result.incomplete?'Extraction partielle (50 pages / 200 000 caractères maximum). ':'')+(result.extraction_method==='tesseract'?'OCR automatique à relire dans l’original.':'PDF scanné sans texte : OCR nécessaire sur ses images.');
+          }catch(error){status.textContent='Extraction impossible : '+(error.message||'format non pris en charge.');}
+          finally{extract.disabled=false;}
+        });card.append(extract);
+      }
       const use = button('Préparer une vérification', () => {
         const excerpt = notes.value.trim() || record.text;
         if (!excerpt) { status.textContent = 'Ajoutez d’abord le passage à vérifier dans les notes.'; return; }
@@ -82,6 +93,46 @@
     }
     if (!list.children.length) list.append(el('p', 'Aucune pièce correspondante. Importez un document pour commencer.'));
   }
+  const tools = el('section', undefined, 'direct-osint');
+  const toolTitle=el('h3','Rechercher dans les sources publiques');
+  const provider=el('select'); provider.setAttribute('aria-label','Source OSINT');
+  for(const [value,label] of [['crossref','Crossref · publications scientifiques'],['data_gouv','data.gouv.fr · jeux de données'],['entreprises','Annuaire des entreprises · SIREN']]) {const option=el('option',label);option.value=value;provider.append(option);}
+  const term=el('input'); term.type='search';term.maxLength=250;term.placeholder='Sujet, titre, entreprise…';term.setAttribute('aria-label','Recherche OSINT directe');
+  const results=el('div'); results.setAttribute('aria-live','polite');
+  const cache=new Map();
+  const run=button('Interroger cette source',async()=>{
+    const query=term.value.trim(); if(query.length<3){status.textContent='Saisissez au moins trois caractères.';return;}
+    run.disabled=true;results.replaceChildren();status.textContent='Recherche documentaire en cours…';
+    try {
+      const key=provider.value+'|'+query; let response=cache.get(key);
+      if(!response || Date.now()-response.saved>300000) {
+        const body={provider:provider.value,query};
+        const result=window.interpreteDesktop ? await window.interpreteDesktop.request('/api/osint',body) : await fetch('/api/osint',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)}).then(async r=>({ok:r.ok,body:await r.json()}));
+        if(!result.ok) throw new Error(result.body.error||'Recherche indisponible.');
+        response={saved:Date.now(),body:result.body}; if(cache.size>=50)cache.delete(cache.keys().next().value);cache.set(key,response);
+      }
+      status.textContent=(response.body.notice||'Résultats à examiner.')+' Consultation : '+new Date(response.body.retrieved_at).toLocaleString('fr-FR');
+      for(const item of response.body.results||[]) {
+        let url;try{url=new URL(item.url);if(url.protocol!=='https:'||url.username||url.password)continue;}catch{continue;}
+        const card=el('article');const link=el('a',item.title);link.href=url.href;link.target='_blank';link.rel='noopener noreferrer';
+        const keep=button('Conserver cette notice dans le dossier',async()=>{
+          try {
+            if(!database)throw new Error('Le stockage local n’est pas disponible.');
+            const text=JSON.stringify({type:'notice_documentaire_non_verifiee',...item,retrieved_at:response.body.retrieved_at,query:response.body.query},null,2);
+            const bytes=new TextEncoder().encode(text);const sha256=[...new Uint8Array(await crypto.subtle.digest('SHA-256',bytes))].map(n=>n.toString(16).padStart(2,'0')).join('');
+            if([...records.values()].some(r=>r.sha256===sha256)){status.textContent='Cette notice est déjà dans le dossier.';return;}
+            await save({id:'evidence_'+crypto.randomUUID(),name:item.title.slice(0,150)+'.json',type:'application/json',size:bytes.length,sha256,collected_at:response.body.retrieved_at,source:url.href,notes:'Notice issue de '+response.body.provider+' ; document original à consulter.',claim_id:'',text,blob:new Blob([bytes],{type:'application/json'})});
+            status.textContent='Notice et provenance conservées ; le document complet n’a pas été téléchargé.';
+          } catch(error){status.textContent=error.message;}
+        });
+        card.append(link,el('p',item.description),keep);results.append(card);
+      }
+      if(!results.children.length)results.append(el('p','Aucun résultat. Cela ne prouve pas l’absence d’information.'));
+    }catch(error){status.textContent=error.message||'Le connecteur est indisponible.';}
+    finally{run.disabled=false;}
+  });
+  tools.append(toolTitle,el('p','La requête est transmise au fournisseur choisi au clic. Les fichiers du dossier ne sont pas envoyés. Ces notices sont des pistes, pas des preuves validées.'),provider,term,run,results);
+  dialog.insertBefore(tools,input);
   search.oninput = render;
   input.onchange = async () => {
     input.disabled = true;

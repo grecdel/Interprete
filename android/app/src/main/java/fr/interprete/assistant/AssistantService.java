@@ -52,7 +52,7 @@ public final class AssistantService extends Service {
     }
     @Override public int onStartCommand(Intent intent, int flags, int startId) {
         if (intent == null) { stopSelf(); return START_NOT_STICKY; }
-        if (START_MIC.equals(intent.getAction())) begin(intent.getStringExtra("request_id"));
+        if (START_MIC.equals(intent.getAction())) begin(intent);
         else if (PAUSE.equals(intent.getAction())) stopMic(() -> app.emit(Json.object("event", "stopped", "message", "Écoute arrêtée depuis la notification.")));
         else if (STOP.equals(intent.getAction())) {
             getSharedPreferences("preferences", MODE_PRIVATE).edit().putBoolean("overlay", false).apply();
@@ -64,7 +64,10 @@ public final class AssistantService extends Service {
         } else refreshBubble();
         return START_NOT_STICKY;
     }
-    private void begin(String requestId) {
+    private void begin(Intent intent) {
+        String requestId=intent.getStringExtra("request_id");
+        final boolean retain=intent.getBooleanExtra("retain_audio",true);
+        final String recordingId="recording_"+java.util.UUID.randomUUID().toString();
         if (checkSelfPermission(Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) { app.reject(requestId, "Le micro n’a pas été autorisé."); stopIfIdle(); return; }
         if (engine != null && engine.isBusy()) { app.reject(requestId, "La dernière transcription est encore en cours. Réessayez dans un instant."); return; }
         startRequest = requestId;
@@ -72,10 +75,17 @@ public final class AssistantService extends Service {
         wakeLock.acquire(60 * 60 * 1000L);
         engine = new MicrophoneEngine(app.audioFactory(), app.api(), new MicrophoneEngine.Listener() {
             public void started() { if (!destroyed) app.resolve(startRequest, Json.object("started", true)); }
+            public org.json.JSONObject saved(byte[] wav,long start,long duration) throws Exception {
+                if(wakeLock.isHeld())wakeLock.acquire(60*60*1000L);
+                if(!retain)return null;
+                org.json.JSONObject clip=app.audioStore.save(wav,start,duration,recordingId);app.emit(Json.object("event","audio","clip",clip));return clip;
+            }
+            public void text(String value,org.json.JSONObject clip) {if(!destroyed)app.emit(Json.object("event","text","text",value,"audio_ref",clip));}
             public void text(String text) { if (!destroyed) { if (wakeLock.isHeld()) wakeLock.acquire(60 * 60 * 1000L); app.emit(Json.object("event", "text", "text", text)); } }
             public void error(String message) { if (!destroyed) { app.reject(startRequest, message); app.emit(Json.object("event", "microphoneError", "message", message)); } }
             public void drained() { main.post(() -> { if (!destroyed) { releaseWakeLock(); foreground(false); stopIfIdle(); } }); }
         });
+        engine.configure(intent.getLongExtra("duration_ms",180*60*1000L),intent.getBooleanExtra("record_only",false));
         engine.start();
     }
     void stopMic(Runnable complete) {

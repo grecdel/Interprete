@@ -1,5 +1,6 @@
 """Assistant de vérification : serveur sans dépendance externe (Python 3.11+)."""
 import ipaddress
+from osint import search as osint_search
 import json
 import os
 import re
@@ -309,20 +310,24 @@ class Handler(BaseHTTPRequestHandler):
                 return self.send_json(403, {'error': 'Accès réservé à l’application Interprete.'})
             return self.send_json(200, {'configured': bool(api_key())})
         name = {'/': 'index.html', '/app.js': 'app.js', '/archive.js': 'archive.js',
-                '/capture.js': 'capture.js', '/workspace.js': 'workspace.js', '/style.css': 'style.css'}.get(self.path)
+                '/capture.js': 'capture.js', '/workspace.js': 'workspace.js', '/documents.js':'documents.js', '/analysis-tools.js':'analysis-tools.js', '/style.css': 'style.css'}.get(self.path)
+        if not name and self.path.startswith('/vendor/'):
+            candidate = (ROOT / 'static' / urllib.parse.urlsplit(self.path).path.lstrip('/')).resolve()
+            if candidate.is_relative_to((ROOT / 'static' / 'vendor').resolve()) and candidate.is_file():
+                name = str(candidate.relative_to(ROOT / 'static'))
         if not name:
             return self.send_json(404, {'error': 'Page introuvable'})
         data = (ROOT / 'static' / name).read_bytes()
         self.send_response(200)
-        self.send_header('Content-Type', {'html': 'text/html; charset=utf-8', 'js': 'text/javascript; charset=utf-8', 'css': 'text/css; charset=utf-8'}[name.split('.')[-1]])
+        self.send_header('Content-Type', {'html': 'text/html; charset=utf-8', 'js': 'text/javascript; charset=utf-8', 'css': 'text/css; charset=utf-8', 'mjs':'text/javascript; charset=utf-8', 'wasm':'application/wasm'}.get(name.split('.')[-1], 'application/octet-stream'))
         self.send_header('Content-Length', str(len(data)))
         self.send_header('X-Content-Type-Options', 'nosniff')
-        self.send_header('Content-Security-Policy', "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self'; media-src 'self' blob:; object-src 'none'; frame-ancestors 'none'")
+        self.send_header('Content-Security-Policy', "default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; worker-src 'self' blob:; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self'; media-src 'self' blob:; object-src 'none'; frame-ancestors 'none'")
         self.end_headers()
         self.wfile.write(data)
 
     def do_POST(self):
-        if self.path not in ('/api/verify', '/api/transcribe', '/api/desktop/key'):
+        if self.path not in ('/api/verify', '/api/transcribe', '/api/desktop/key', '/api/osint'):
             return self.send_json(404, {'error': 'Route introuvable'})
         if not self.authorized():
             return self.send_json(403, {'error': 'Accès réservé à l’application Interprete.'})
@@ -332,6 +337,13 @@ class Handler(BaseHTTPRequestHandler):
             return self.send_json(403, {'error': 'Origine refusée'})
         try:
             length = int(self.headers.get('Content-Length', '0'))
+            if self.path == '/api/osint':
+                if not 0 < length <= 4096:
+                    return self.send_json(400, {'error':'Recherche trop volumineuse.'})
+                value = json.loads(self.rfile.read(length))
+                if not isinstance(value, dict):
+                    raise ValueError('Recherche invalide.')
+                return self.send_json(200, osint_search(value.get('provider'), value.get('query')))
             if self.path == '/api/transcribe':
                 if not 0 < length <= 8 * 1024 * 1024:
                     return self.send_json(400, {'error': 'Extrait audio trop volumineux ou vide.'})

@@ -11,3 +11,6 @@
 @media(max-height:600px) { .android-mode .assistant-panel { bottom: 72px; }.android-mode .feed { min-height: 35px; }.android-mode .listen-copy>span { display: none; }.android-mode .bubble-dock { bottom: 13px; } }
 
 .android-mode #android-archive-preview { width:100%; padding:10px; margin-top:12px; border:1px solid #d7cbe5; border-radius:7px; background:#f4eef8; color:#937aa5; font-size:11px; }
+.audio-options { display:grid;gap:6px;padding:8px 0;color:var(--muted);font-size:10px;max-height:90px;overflow:auto; }
+.audio-options label { display:flex;align-items:center;gap:6px; }
+#export-audio-bundle { width:100%;padding:10px;margin-top:8px;border:1px solid var(--line);border-radius:8px;background:var(--surface);color:var(--accent);font-size:11px; }

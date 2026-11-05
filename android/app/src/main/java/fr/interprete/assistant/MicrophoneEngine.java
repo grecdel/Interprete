@@ -16,7 +16,7 @@ import java.util.concurrent.TimeUnit;
 final class MicrophoneEngine {
     interface Source { void start(); int read(byte[] buffer); void stop(); void release(); }
     interface Factory { Source create(); }
-    interface Listener { void started(); void text(String text); void error(String message); void drained(); }
+    interface Listener { void started(); void text(String text); void error(String message); void drained(); default org.json.JSONObject saved(byte[] wav,long start,long duration) throws Exception {return null;} default void text(String value,org.json.JSONObject clip) {text(value);} }
     private final Factory factory;
     private final NativeApi api;
     private final Listener listener;
@@ -26,18 +26,24 @@ final class MicrophoneEngine {
     private volatile Source source;
     private boolean recorderDone = true;
     private int pending;
+    private long samples;
+    private long startClock;
+    private long maxDuration=180*60*1000L;
+    private boolean recordOnly;
+    void configure(long duration,boolean offline) {maxDuration=Math.min(180*60*1000L,Math.max(60000,duration));recordOnly=offline;}
     MicrophoneEngine(Factory factory, NativeApi api, Listener listener) { this.factory = factory; this.api = api; this.listener = listener; }
     void start() {
         synchronized (this) { if (!recorderDone || recording) throw new IllegalStateException("Le micro est déjà actif."); recording = true; recorderDone = false; }
         new Thread(() -> {
             ByteArrayOutputStream current = new ByteArrayOutputStream();
             try {
-                source = factory.create(); source.start(); listener.started();
+                source = factory.create(); source.start(); startClock=android.os.SystemClock.elapsedRealtime(); listener.started();
                 byte[] buffer = new byte[4096];
                 while (recording) {
                     int count = source.read(buffer);
                     if (count <= 0) { if (recording) throw new IllegalStateException("Le micro a interrompu l’enregistrement."); break; }
                     current.write(buffer, 0, count);
+                    if(android.os.SystemClock.elapsedRealtime()-startClock>=maxDuration){recording=false;listener.error("Durée maximale atteinte. Le dernier extrait est conservé.");}
                     if (current.size() >= 16000 * 2 * 12) { submit(current.toByteArray()); current.reset(); }
                 }
             } catch (Exception ignored) { if (recording) listener.error("Le micro est indisponible. Vérifiez les permissions et l’entrée audio."); }
@@ -58,12 +64,18 @@ final class MicrophoneEngine {
     boolean isRecording() { return recording; }
     boolean isBusy() { synchronized (this) { return !recorderDone || pending > 0; } }
     private void submit(byte[] pcm) {
+        final byte[] audio=wav(pcm);
+        final org.json.JSONObject clip;
+        try {clip=listener.saved(audio,samples*1000/16000,pcm.length*1000L/32000);}
+        catch(Exception error){recording=false;listener.error(safeMessage(error));return;}
+        samples+=pcm.length/2;
+        if(recordOnly){java.util.Arrays.fill(pcm,(byte)0);return;}
         boolean nonzero = false; for (byte value : pcm) if (value != 0) { nonzero = true; break; }
         if (!nonzero) return;
         synchronized (this) { pending++; }
         try {
             network.execute(() -> {
-                try { String text = api.transcribe(wav(pcm)); if (!text.isEmpty()) listener.text(text); }
+                try { String text = api.transcribe(audio); if (!text.isEmpty()) listener.text(text,clip); }
                 catch (Exception error) { recording = false; listener.error("Un extrait n’a pas pu être transcrit. " + safeMessage(error)); Source captured = source; if (captured != null) try { captured.stop(); } catch (Exception ignored) { } }
                 finally { java.util.Arrays.fill(pcm, (byte) 0); synchronized (this) { pending--; } finishIfDrained(); }
             });

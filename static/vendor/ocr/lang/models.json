@@ -1,0 +1,12 @@
+{
+  "fra": {
+    "source": "https://raw.githubusercontent.com/tesseract-ocr/tessdata_fast/4.1.0/fra.traineddata",
+    "sha256_uncompressed": "ced037562e8c80c13122dece28dd477d399af80911a28791a66a63ac1e3445ca",
+    "sha256": "f4a6907e5a22350cd8df1313017333d5d544577c98090ac1da45c6e07da364a3"
+  },
+  "eng": {
+    "source": "https://raw.githubusercontent.com/tesseract-ocr/tessdata_fast/4.1.0/eng.traineddata",
+    "sha256_uncompressed": "7d4322bd2a7749724879683fc3912cb542f19906c83bcc1a52132556427170b2",
+    "sha256": "f1c22599ed6fd3eb821d87fdb43e09f98b61179a4abe38c43cfca2cdcb9f5ec2"
+  }
+}

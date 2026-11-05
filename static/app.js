@@ -293,14 +293,14 @@ async function startListening() {
   setPanelOpen(true);
   if (desktop) {
     if (wantedListening || endingSession) return;
-    if (!configured && !await refreshConfiguration()) { toggleSettings(true); return; }
+    if (!window.interpreteRecordOnly && !configured && !await refreshConfiguration()) { toggleSettings(true); return; }
     wantedListening = true; ui.error.hidden = true; updateStatus();
     ui['live-preview'].hidden = false;
     ui['live-queue'].textContent = 'Transcription par extraits de 12 secondes · audio envoyé à OpenAI.';
     const epoch = ++microphoneEpoch;
     const capture = new window.InterpreteMicrophone({
       transcribe: (audio, mimeType) => desktop.transcribe(audio, mimeType),
-      onText: text => { acceptSpeech(text); ui['live-transcript'].textContent = finalPreview; scheduleLive(); },
+      onText: (text, audioRef) => { acceptSpeech(text, audioRef); ui['live-transcript'].textContent = finalPreview; scheduleLive(); },
       onError: message => { archive.recordCapture('transcription_interrupted'); if (epoch === microphoneEpoch) stopListening(); showError(message); }
     });
     microphoneCapture = capture;
@@ -322,8 +322,8 @@ async function startListening() {
   try { recognition.start(); updateStatus(); }
   catch { stopListening(); showError('Le micro n’est pas encore disponible. Réessayez dans un instant.'); }
 }
-function acceptSpeech(text) {
-  pendingTranscriptIds.push(archive.recordTranscript(text)); updateArchiveCount();
+function acceptSpeech(text, audioRef = null) {
+  pendingTranscriptIds.push(archive.recordTranscript(text, audioRef)); updateArchiveCount();
   if (!pendingSince) pendingSince = Date.now();
   pendingSpeech = `${pendingSpeech} ${text}`.trim();
   finalPreview = `${finalPreview} ${text}`.trim().slice(-600);
@@ -538,3 +538,18 @@ refreshConfiguration().then(() => { scheduleLive(); if (desktop && !configured) 
   }
   tools.append(links); document.querySelector('.composer').after(tools);
 })();
+
+
+window.prepareInterpreteArchive = async () => {
+  if (busy || endingSession) throw new Error('Attendez la fin de la recherche ou de l’export en cours.');
+  endingSession=true;updateStatus();
+  try {
+    await stopListening();
+    if(pendingSpeech.trim().length>=10 && configured===true) {
+      const text=pendingSpeech.trim(), identities=pendingTranscriptIds;
+      pendingSpeech='';pendingSince=0;pendingTranscriptIds=[];
+      await runVerification(text,'live',null,identities);
+    }
+    return archive.snapshot();
+  } finally {endingSession=false;updateStatus();}
+};

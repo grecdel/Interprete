@@ -81,6 +81,8 @@ public class AndroidSmokeTest {
             SystemClock.sleep(1100);
             app.startService(new Intent(app, AssistantService.class).setAction(AssistantService.STOP));
             until(scenario, "window.InterpreteArchive.snapshot().transcript.length===2 && !document.getElementById('companion').classList.contains('is-listening')");
+            assertEquals("true", js(scenario, "window.InterpreteArchive.snapshot().transcript.every(fragment=>!!fragment.audio_ref?.id)"));
+            assertEquals("2", js(scenario, "window.InterpreteArchive.snapshot().audio.length"));
             // Replace only Android's document picker; the real archive bridge and writer run.
             java.io.File archive = new java.io.File(app.getFilesDir(), "test-interview.html");
             android.app.Instrumentation instrumentation = InstrumentationRegistry.getInstrumentation();
@@ -103,6 +105,20 @@ public class AndroidSmokeTest {
                 assertFalse(html.contains("fake-key-used-only"));
                 assertEquals(html, app.lastArchive);
             } finally { instrumentation.removeMonitor(picker); archive.delete(); }
+            java.io.File zipFile=new java.io.File(app.getFilesDir(),"test-interview.zip");
+            android.content.IntentFilter zipFilter=new android.content.IntentFilter(Intent.ACTION_CREATE_DOCUMENT);zipFilter.addCategory(Intent.CATEGORY_OPENABLE);zipFilter.addDataType("application/zip");
+            android.app.Instrumentation.ActivityMonitor zipPicker=instrumentation.addMonitor(zipFilter,new android.app.Instrumentation.ActivityResult(android.app.Activity.RESULT_OK,new Intent().setData(android.net.Uri.fromFile(zipFile))),true);
+            try {
+                js(scenario,"document.getElementById('export-audio-bundle').click();true");
+                until(scenario,"document.getElementById('archive-status').textContent.includes('Dossier ZIP exporté')");
+                assertEquals(1,zipPicker.getHits());
+                try(java.util.zip.ZipFile zip=new java.util.zip.ZipFile(zipFile)) {
+                    assertNotNull(zip.getEntry("index.html"));assertNotNull(zip.getEntry("session.json"));
+                    org.json.JSONObject session=new org.json.JSONObject(new String(NativeApi.read(zip.getInputStream(zip.getEntry("session.json")),1024*1024),java.nio.charset.StandardCharsets.UTF_8));
+                    assertEquals(2,session.getJSONArray("audio").length());
+                    for(int i=0;i<2;i++) {org.json.JSONObject clip=session.getJSONArray("audio").getJSONObject(i);java.util.zip.ZipEntry entry=zip.getEntry("audio/"+clip.getString("id")+".wav");assertNotNull(entry);byte[] bytes=NativeApi.read(zip.getInputStream(entry),1024*1024);assertEquals('R',bytes[0]);assertEquals(clip.getLong("size"),bytes.length);}
+                }
+            }finally{instrumentation.removeMonitor(zipPicker);zipFile.delete();}
             js(scenario, "document.getElementById('archive-button').click();true");
             js(scenario, "document.getElementById('status').textContent='Démonstration · réponses simulées';document.getElementById('settings-button').click();true");
             InstrumentationRegistry.getInstrumentation().getUiAutomation().takeScreenshot().compress(android.graphics.Bitmap.CompressFormat.PNG, 100, new java.io.FileOutputStream(new java.io.File(app.getExternalFilesDir(null), "android-demo.png")));

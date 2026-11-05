@@ -6,8 +6,10 @@
     return new Promise((resolve, reject) => {
       const id = 'rpc_' + (++nextId);
       const timer = setTimeout(() => { pending.delete(id); reject(new Error('Cette opération prend trop de temps. Réessayez.')); }, timeout);
+      const raw=JSON.stringify({id,action,data});
+      if(raw.length>15*1024*1024){clearTimeout(timer);reject(new Error('Dossier trop volumineux pour cet export. Exportez les pièces séparément.'));return;}
       pending.set(id, {resolve, reject, timer});
-      window.InterpreteNative.postMessage(JSON.stringify({id, action, data}));
+      window.InterpreteNative.postMessage(raw);
     });
   }
   function overlayState(enabled, waiting) {
@@ -23,10 +25,14 @@
       const request = pending.get(event.id); pending.delete(event.id); clearTimeout(request.timer);
       if (event.error) request.reject(new Error(event.error)); else request.resolve(event.result || {});
     } else if (event.event === 'text') {
-      if (microphone) microphone.onText(event.text);
-      else if (window.acceptSpeech) window.acceptSpeech(event.text);
-    } else if (event.event === 'microphoneError' || event.event === 'stopped') {
+      if (microphone) microphone.onText(event.text,event.audio_ref);
+      else if (window.acceptSpeech) window.acceptSpeech(event.text,event.audio_ref);
+    } else if (event.event === 'audio') {
+      const clips=window.InterpreteArchive.session.audio; if(!clips.some(clip=>clip.id===event.clip.id))clips.push(event.clip);
+    } else if (event.event === 'microphoneError') {
       microphone?.onError(event.message);
+    } else if(event.event === 'stopped') {
+      window.stopListening?.();
     } else if (event.event === 'overlay') overlayState(event.enabled, false);
     else if (event.event === 'open') {
       opened.forEach(callback => callback());
@@ -49,7 +55,7 @@
     constructor({onText, onError}) { this.onText = onText; this.onError = onError; }
     async start() {
       const previous = microphone; microphone = this;
-      try { await call('startMic'); } catch (error) { microphone = previous; throw error; }
+      try { await call('startMic',{retain_audio:document.getElementById('retain-audio')?.checked!==false,record_only:Boolean(window.interpreteRecordOnly),duration_ms:Number(document.getElementById('audio-duration')?.value||180)*60000}); } catch (error) { microphone = previous; throw error; }
     }
     stop() { return call('stopMic', {}, 300000); }
   };
@@ -57,7 +63,30 @@
     document.body.classList.add('android-mode');
     preview = document.createElement('button'); preview.id = 'android-archive-preview'; preview.type = 'button'; preview.hidden = true; preview.textContent = 'Voir le dernier compte rendu';
     preview.onclick = () => call('viewArchive').catch(() => {}); document.getElementById('archive-tray').append(preview);
+    const audioOptions=document.createElement('div');audioOptions.className='audio-options';
+    const retainLabel=document.createElement('label'),retain=document.createElement('input');retain.type='checkbox';retain.id='retain-audio';retain.checked=true;retainLabel.append(retain,' Conserver l’audio sur ce téléphone');
+    const offlineLabel=document.createElement('label'),offline=document.createElement('input');offline.type='checkbox';offline.id='record-only';offline.onchange=()=>{window.interpreteRecordOnly=offline.checked;};offlineLabel.append(offline,' Enregistrer hors ligne, sans transcription');
+    const durationLabel=document.createElement('label');durationLabel.textContent='Durée maximale ';const duration=document.createElement('select');duration.id='audio-duration';for(const minutes of [30,60,180]){const option=document.createElement('option');option.value=minutes;option.textContent=minutes+' min';duration.append(option);}duration.value='180';durationLabel.append(duration);
+    audioOptions.append(retainLabel,offlineLabel,durationLabel);document.querySelector('.live-section').append(audioOptions);
+    const bundle=document.createElement('button');bundle.type='button';bundle.id='export-audio-bundle';bundle.textContent='Terminer et exporter le dossier avec audio (ZIP)';
+    bundle.onclick=async()=>{
+      bundle.disabled=true;const status=document.getElementById('archive-status');
+      try {
+        const snapshot=await window.prepareInterpreteArchive();snapshot.audio_directory='audio/';
+        if(!snapshot.audio.length)throw new Error('Aucun audio conservé dans cette session.');
+        const html=window.InterpreteArchive.htmlDocument(snapshot);
+        const result=await call('audioBundle',{content:html,session:JSON.stringify(snapshot,null,2),clips:snapshot.audio.map(clip=>clip.id)},300000);
+        status.textContent=result.saved?'Dossier ZIP exporté : compte rendu, transcription et extraits audio.':'Export annulé.';
+        if(result.saved){preview.hidden=false;window.interpreteDesktop.setUnsaved(false);}
+      }catch(error){status.textContent=error.message||'Export audio impossible.';}
+      finally{bundle.disabled=false;}
+    };document.getElementById('archive-tray').append(bundle);
     const settings = document.getElementById('settings-tray');
+    const recover=document.createElement('button');recover.type='button';recover.textContent='Récupérer les audios conservés sur ce téléphone';
+    recover.onclick=async()=>{try{const result=await call('audioInventory');const clips=window.InterpreteArchive.session.audio;for(const clip of result.clips||[])if(!clips.some(value=>value.id===clip.id))clips.push(clip);document.getElementById('settings-status').textContent=clips.length+' extraits disponibles pour export ZIP. Les transcriptions de sessions fermées ne sont pas restaurées.';}catch(error){document.getElementById('settings-status').textContent=error.message;}};
+    const clear=document.createElement('button');clear.type='button';clear.textContent='Supprimer les audios conservés';clear.onclick=async()=>{if(!confirm('Supprimer définitivement tous les audios de ce téléphone ? Exportez d’abord le dossier ZIP.'))return;try{await call('clearAudio');window.InterpreteArchive.session.audio=[];document.getElementById('settings-status').textContent='Audios locaux supprimés. Les exports existants restent inchangés.';}catch(error){document.getElementById('settings-status').textContent=error.message;}};
+    settings.append(recover,clear);
+
     const button = document.createElement('button'); button.id = 'android-overlay'; button.type = 'button'; button.dataset.enabled = 'false';
     const status = document.createElement('p'); status.id = 'android-overlay-status';
     settings.append(button, status);
@@ -67,7 +96,7 @@
     };
     const help = document.querySelector('.help>div'); help.replaceChildren();
     for (const text of [
-      'Le micro envoie l’audio à OpenAI par extraits d’environ 12 secondes. Une notification indique l’écoute et permet de l’arrêter.',
+      'L’audio peut être conservé localement sur ce téléphone (512 Mio maximum). Les extraits sont aussi envoyés à OpenAI pour la transcription, sauf en mode hors ligne. Exportez le ZIP avant de supprimer les enregistrements.',
       'La touche Accueil peut laisser l’écoute continuer en arrière-plan. La croix du volet arrête l’écoute. Activez la bulle dans les réglages pour retrouver Interprete au-dessus des autres applications.',
       'Le son interne des applications et les appels ne sont pas capturés directement. Utilisez un reportage sur haut-parleur ou un micro externe.',
       'Exportez la session avant de quitter : la transcription est automatique et peut être erronée. Les sources, relances et connexions restent à contrôler.'

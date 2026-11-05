@@ -1,6 +1,6 @@
 'use strict';
 
-const API_PATHS = new Set(['/api/status', '/api/verify']);
+const API_PATHS = new Set(['/api/status', '/api/verify', '/api/osint']);
 function validKey(value) {
   return typeof value === 'string' && value.trim().length >= 16 && value.trim().length <= 1024 && !/\s/.test(value.trim());
 }

@@ -1,0 +1,2 @@
+# Preserve upstream bundled code and license text verbatim.
+static/vendor/** -whitespace

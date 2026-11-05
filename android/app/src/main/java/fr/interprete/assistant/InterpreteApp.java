@@ -11,6 +11,7 @@ public final class InterpreteApp extends Application {
     final String launchToken = java.util.UUID.randomUUID().toString();
     volatile String lastArchive = "";
     KeyVault vault;
+    AudioStore audioStore;
     private NativeApi api;
     private MicrophoneEngine.Factory audioFactory = MicrophoneEngine::androidSource;
     volatile AssistantService service;
@@ -18,7 +19,7 @@ public final class InterpreteApp extends Application {
     private EventSink sink;
     private final ArrayDeque<JSONObject> pending = new ArrayDeque<>();
     private final Handler main = new Handler(Looper.getMainLooper());
-    @Override public void onCreate() { super.onCreate(); vault = new KeyVault(this); api = new NativeApi(this, vault); }
+    @Override public void onCreate() { super.onCreate(); vault = new KeyVault(this); audioStore = new AudioStore(this); api = new NativeApi(this, vault); }
     NativeApi api() { return api; }
     MicrophoneEngine.Factory audioFactory() { return audioFactory; }
     void useTestAudio(MicrophoneEngine.Factory replacement) { if (!BuildConfig.DEBUG) throw new SecurityException(); audioFactory = replacement; }

@@ -3,7 +3,7 @@
 <p align="center"><strong>Une bulle pendant l’interview. Des pistes pour rebondir. Une archive pour tout relire.</strong></p>
 <p align="center">
   <a href="https://github.com/grecdel/Interprete/releases/tag/v0.2.0">Télécharger pour Linux</a> ·
-  <a href="https://github.com/grecdel/Interprete/releases/tag/v0.3.0">Télécharger pour Android</a> ·
+  <a href="https://github.com/grecdel/Interprete/releases/tag/v0.4.0">Télécharger pour Android</a> ·
   <a href="docs/DESKTOP.md">Premiers pas</a> ·
   <a href="docs/DEVELOPMENT.md">Développer</a>
 </p>
@@ -20,7 +20,7 @@
 
 ## Sur Android aussi
 
-Téléchargez [**Interprete-0.3.0-android.apk**](https://github.com/grecdel/Interprete/releases/download/v0.3.0/Interprete-0.3.0-android.apk) et ouvrez le fichier sur votre téléphone (**Android 8.0 ou ultérieur**, Android System WebView à jour). Cette version autonome utilise le micro et une bulle optionnelle, avec les autorisations Android et une notification visible pendant l’écoute. La clé se saisit dans l’application ; aucun serveur Linux n’est nécessaire.
+Téléchargez [**Interprete-0.4.0-android.apk**](https://github.com/grecdel/Interprete/releases/download/v0.4.0/Interprete-0.4.0-android.apk) et ouvrez le fichier sur votre téléphone (**Android 8.0 ou ultérieur**, Android System WebView à jour). Cette version autonome utilise le micro et une bulle optionnelle, avec les autorisations Android et une notification visible pendant l’écoute. La clé se saisit dans l’application ; aucun serveur Linux n’est nécessaire.
 
 → [Guide Android : installation, permissions, bulle et archives](docs/ANDROID.md)
 
@@ -104,3 +104,8 @@ Le compte rendu propose désormais une ambiance **Enquête** : liège, dossiers,
 ![Tableau enquête avec données fictives, imports et connexions](docs/assets/investigation-board.png)
 
 Ce changement de code n’est pas encore inclus dans l’APK publié. [Fonctionnement et état des évolutions](docs/EVOLUTION.md).
+
+
+## Version Android 0.4
+
+Les [fonctions et limites de la version 0.4](docs/VERSION-0.4.md) décrivent les trois connecteurs documentaires, le PDF/OCR local et la conservation audio Android avec export ZIP. Le catalogue OSINT complet reste une feuille de route : tous les services proposés ne sont pas encore connectés.

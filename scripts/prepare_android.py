@@ -9,6 +9,7 @@ target = root / 'android/app/src/main/assets/web'
 target.mkdir(parents=True, exist_ok=True)
 for source in (root / 'static').iterdir():
     if source.is_file(): shutil.copyfile(source, target / source.name)
+    elif source.name == 'vendor': shutil.copytree(source, target / source.name, dirs_exist_ok=True)
 for source in (root / 'android/app/src/main/assets/bridge').iterdir():
     if source.is_file(): shutil.copyfile(source, target / source.name)
 index = (target / 'index.html').read_text()
