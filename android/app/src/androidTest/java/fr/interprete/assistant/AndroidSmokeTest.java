@@ -72,6 +72,12 @@ public class AndroidSmokeTest {
             js(scenario, "document.getElementById('microphone').click();true");
             until(scenario, "window.InterpreteArchive.snapshot().transcript.length>0");
             assertEquals("true", js(scenario, "window.InterpreteArchive.snapshot().transcript[0].text.includes('dernière phrase')"));
+            until(scenario, "!document.getElementById('companion').classList.contains('is-listening')");
+            js(scenario, "document.getElementById('microphone').click();true");
+            until(scenario, "document.getElementById('companion').classList.contains('is-listening')");
+            SystemClock.sleep(1100);
+            app.startService(new Intent(app, AssistantService.class).setAction(AssistantService.STOP));
+            until(scenario, "window.InterpreteArchive.snapshot().transcript.length===2 && !document.getElementById('companion').classList.contains('is-listening')");
             // Replace only Android's document picker; the real archive bridge and writer run.
             java.io.File archive = new java.io.File(app.getFilesDir(), "test-interview.html");
             android.app.Instrumentation instrumentation = InstrumentationRegistry.getInstrumentation();

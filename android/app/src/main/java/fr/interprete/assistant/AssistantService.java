@@ -56,8 +56,11 @@ public final class AssistantService extends Service {
         else if (PAUSE.equals(intent.getAction())) stopMic(() -> app.emit(Json.object("event", "stopped", "message", "Écoute arrêtée depuis la notification.")));
         else if (STOP.equals(intent.getAction())) {
             getSharedPreferences("preferences", MODE_PRIVATE).edit().putBoolean("overlay", false).apply();
-            app.emit(Json.object("event", "stopped", "message", "Interprete a été arrêté depuis la notification."));
-            stopSelf();
+            removeBubble();
+            stopMic(() -> {
+                app.emit(Json.object("event", "stopped", "message", "Interprete a été arrêté depuis la notification."));
+                stopSelf();
+            });
         } else refreshBubble();
         return START_NOT_STICKY;
     }
