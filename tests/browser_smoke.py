@@ -247,5 +247,42 @@ class BrowserChecks(unittest.TestCase):
                 self.assertEqual(error.exception.code, 400)
 
 
+    def test_local_evidence_is_searchable_deduplicated_and_exported_without_binary(self):
+        import hashlib
+        self.page.locator('.workspace-open').click()
+        expect(self.page.locator('#evidence-files')).to_be_enabled()
+        payload = b'Le budget de reference est de 120 millions.'
+        self.page.locator('#evidence-files').set_input_files({'name': 'budget.txt', 'mimeType': 'text/plain', 'buffer': payload})
+        expect(self.page.locator('.evidence-list article')).to_have_count(1)
+        expect(self.page.locator('.evidence-list article')).to_contain_text(hashlib.sha256(payload).hexdigest())
+        self.page.locator('#evidence-files').set_input_files({'name': 'copie.txt', 'mimeType': 'text/plain', 'buffer': payload})
+        expect(self.page.locator('.investigation [role=status]')).to_contain_text('déjà présent')
+        self.assertEqual(self.page.locator('.evidence-list article').count(), 1)
+        self.page.locator('.evidence-list textarea').fill('Passage à vérifier : 120 millions.')
+        self.page.get_by_role('button', name='Conserver les annotations').click()
+        expect(self.page.locator('.investigation [role=status]')).to_contain_text('Annotations conservées')
+        snapshot = self.page.evaluate('InterpreteArchive.snapshot()')
+        self.assertNotIn('blob', snapshot['evidence'][0])
+        self.assertEqual(snapshot['evidence'][0]['notes'], 'Passage à vérifier : 120 millions.')
+        self.assertEqual(self.requests, [])
+        with self.page.expect_download() as download:
+            self.page.get_by_role('button', name='Exporter la pièce et ses annotations (JSON)').click()
+        packed = json.loads(Path(download.value.path()).read_text())
+        import base64
+        self.assertEqual(base64.b64decode(packed['original_base64']), payload)
+        self.assertEqual(packed['metadata']['notes'], 'Passage à vérifier : 120 millions.')
+        packed['metadata']['sha256'] = '0' * 64
+        self.page.locator('#evidence-files').set_input_files({'name':'falsifie.json','mimeType':'application/json','buffer':json.dumps(packed).encode()})
+        expect(self.page.locator('.investigation [role=status]')).to_contain_text('empreinte')
+        self.assertEqual(self.page.locator('.evidence-list article').count(), 1)
+        self.page.get_by_role('button', name='Préparer une vérification').click()
+        expect(self.page.locator('#transcript')).to_have_value('Passage à vérifier : 120 millions.')
+        self.assertEqual(self.requests, [])
+        self.page.reload()
+        self.page.locator('.workspace-open').click()
+        expect(self.page.locator('.evidence-list article')).to_have_count(1)
+        expect(self.page.locator('.evidence-list textarea')).to_have_value('Passage à vérifier : 120 millions.')
+
+
 if __name__ == '__main__':
     unittest.main()

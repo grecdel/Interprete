@@ -309,7 +309,7 @@ class Handler(BaseHTTPRequestHandler):
                 return self.send_json(403, {'error': 'Accès réservé à l’application Interprete.'})
             return self.send_json(200, {'configured': bool(api_key())})
         name = {'/': 'index.html', '/app.js': 'app.js', '/archive.js': 'archive.js',
-                '/capture.js': 'capture.js', '/style.css': 'style.css'}.get(self.path)
+                '/capture.js': 'capture.js', '/workspace.js': 'workspace.js', '/style.css': 'style.css'}.get(self.path)
         if not name:
             return self.send_json(404, {'error': 'Page introuvable'})
         data = (ROOT / 'static' / name).read_bytes()

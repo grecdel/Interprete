@@ -105,6 +105,22 @@ window.InterpreteArchive = (() => {
     $('date').textContent = `SESSION DU ${new Date(data.created_at).toLocaleDateString('fr-FR')} · EXPORTÉE LE ${new Date(data.exported_at).toLocaleString('fr-FR')}`;
     $('stats').textContent = `${data.transcript.length} fragment(s) transcrit(s) · ${local.length} affirmation(s) examinée(s) · ${connectionCount} connexion(s)`;
     $('print').onclick = () => window.print();
+    if (data.evidence?.length) {
+      const section = element('section'); section.id = 'evidence';
+      section.append(element('h2', '', 'Pièces du dossier'), element('p', 'notice', 'Inventaire et annotations : les fichiers originaux ne sont pas incorporés à ce compte rendu. Une empreinte identifie un contenu ; elle ne certifie ni son origine ni sa véracité.'));
+      for (const item of data.evidence) {
+        const card = element('article', 'claim');
+        card.append(element('h3', '', item.name), element('p', 'muted', `Collecte : ${item.collected_at} · ${item.size} octets · SHA-256 ${item.sha256}`));
+        if (item.notes) card.append(element('p', '', item.notes));
+        if (item.source) sourcesFor(card, [{url:item.source, title:'Provenance renseignée'}]);
+        if (item.claim_id && claimsById.has(item.claim_id)) {
+          const link = element('a', '', 'Voir l’affirmation associée'); link.href = '#' + item.claim_id; card.append(link);
+        }
+        section.append(card);
+      }
+      $('verifications').before(section);
+    }
+
     if (!data.transcript.length) $('transcript-list').append(element('p', 'muted', 'Aucune transcription micro dans cette session. Les textes et liens soumis sont conservés ci-dessous.'));
     for (const fragment of data.transcript) {
       const row = element('div', 'transcript-row'); row.id = fragment.id;

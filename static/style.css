@@ -169,3 +169,13 @@ body, .android-mode { background:var(--canvas); }
 .osint-tools p { font-size:10px; line-height:1.6; }
 .osint-tools>div { display:flex; flex-wrap:wrap; gap:6px; max-height:100px; overflow:auto; }
 .osint-tools a { color:var(--accent); text-decoration:none; border:1px solid var(--line); padding:6px 9px; border-radius:12px; }
+.workspace-open { margin:3px 18px 8px; padding:9px; background:var(--surface); color:var(--accent); border:1px solid var(--line); border-radius:10px; font-size:11px; }
+.investigation { width:min(900px,95vw); max-height:90dvh; overflow:auto; background:var(--surface); color:var(--ink); border:1px solid var(--line); border-radius:22px; padding:24px; }
+.investigation::backdrop { background:#080b18b3; backdrop-filter:blur(5px); }
+.investigation header { display:flex; justify-content:space-between; align-items:center; gap:12px; }
+.investigation p { font-size:12px; line-height:1.7; overflow-wrap:anywhere; }
+.investigation input,.investigation textarea,.investigation select { display:block; width:100%; color:var(--ink); background:var(--canvas); border:1px solid var(--line); border-radius:8px; padding:10px; margin:8px 0; font:inherit; }
+.investigation button { color:var(--accent); background:var(--canvas); border:1px solid var(--line); border-radius:8px; padding:9px; margin:5px; }
+.evidence-list article { border-top:1px solid var(--line); padding:18px 0; }
+.evidence-list label { display:block; font-size:12px; margin-top:12px; }
+.evidence-list pre { white-space:pre-wrap; overflow-wrap:anywhere; max-height:300px; overflow:auto; font-size:12px; }

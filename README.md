@@ -89,3 +89,10 @@ npm run dist:linux
 La [compilation GitHub Actions](.github/workflows/build-linux.yml) produit l’AppImage, l’archive portable et leurs empreintes SHA-256. Elle vérifie aussi l’application empaquetée. Le code reste utilisable en [mode web de développement](docs/DEVELOPMENT.md).
 
 Les tests simulent les réponses de recherche et l’audio. Ils valident le fonctionnement logiciel, **pas l’exactitude journalistique** d’une interview réelle.
+
+
+## Dossier d’enquête et atelier OSINT — évolution du code
+
+Le bouton **Dossier d’enquête** ouvre une bibliothèque locale de pièces : import, recherche dans les textes simples, annotations, provenance, empreintes SHA-256 et association aux affirmations. Chaque pièce peut être exportée avec son original dans un conteneur JSON réimportable. Le compte rendu conserve aussi l’inventaire et les annotations. Aucun fichier n’est envoyé automatiquement aux services de recherche.
+
+Le [catalogue d’intégrations OSINT](docs/OSINT.md) détaille les outils proposés, leurs accès et les étapes d’intégration. Cette évolution du code n’est pas encore incorporée à l’APK v0.3.0 publié ; les connecteurs API, l’OCR, l’audio long et la fresque sont encore à développer.
