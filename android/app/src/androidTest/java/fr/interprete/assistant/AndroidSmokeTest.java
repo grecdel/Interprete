@@ -83,6 +83,7 @@ public class AndroidSmokeTest {
             until(scenario, "window.InterpreteArchive.snapshot().transcript.length===2 && !document.getElementById('companion').classList.contains('is-listening')");
             assertEquals("true", js(scenario, "window.InterpreteArchive.snapshot().transcript.every(fragment=>!!fragment.audio_ref?.id)"));
             assertEquals("2", js(scenario, "window.InterpreteArchive.snapshot().audio.length"));
+            assertTrue(app.audioStore.inventory().getJSONObject(0).getString("transcript").contains("dernière phrase"));
             // Replace only Android's document picker; the real archive bridge and writer run.
             java.io.File archive = new java.io.File(app.getFilesDir(), "test-interview.html");
             android.app.Instrumentation instrumentation = InstrumentationRegistry.getInstrumentation();

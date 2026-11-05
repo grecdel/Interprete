@@ -21,6 +21,14 @@ final class AudioStore {
         try(FileOutputStream output=new FileOutputStream(new File(directory,id+".json"))){output.write(metadata.toString().getBytes(java.nio.charset.StandardCharsets.UTF_8));}
         return metadata;
     }
+    synchronized void transcript(String id,String text) throws Exception {
+        file(id);android.util.AtomicFile sidecar=new android.util.AtomicFile(new File(directory,id+".json"));
+        JSONObject value;
+        try(FileInputStream input=sidecar.openRead()){value=new JSONObject(new String(NativeApi.read(input,100000),java.nio.charset.StandardCharsets.UTF_8));}
+        value.put("transcript",text.substring(0,Math.min(20000,text.length())));value.put("transcribed_at",java.time.Instant.now().toString());
+        FileOutputStream output=sidecar.startWrite();
+        try{output.write(value.toString().getBytes(java.nio.charset.StandardCharsets.UTF_8));sidecar.finishWrite(output);}catch(Exception error){sidecar.failWrite(output);throw error;}
+    }
     File file(String id) {
         if(id==null||!id.matches("clip_[0-9a-f-]{36}"))throw new IllegalArgumentException("Extrait audio invalide.");
         return new File(directory,id+".wav");

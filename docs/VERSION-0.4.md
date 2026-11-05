@@ -18,7 +18,7 @@ Le stockage audio est limité à 512 Mio pour l’ensemble des prises présentes
 
 Le bouton **Terminer et exporter le dossier avec audio (ZIP)** attend la dernière transcription puis écrit progressivement les fichiers, sans charger toute l’interview en RAM. Le ZIP contient `index.html`, `session.json` et les extraits dans `audio/`. Le HTML seul n’embarque pas les fichiers audio. Décompressez le ZIP en conservant son arborescence pour écouter les extraits ; l’aperçu de l’application peut aussi lire les audios locaux après l’export ZIP.
 
-Les réglages permettent de récupérer les audios conservés après une fermeture de l’application, puis de les exporter. Les transcriptions non exportées de sessions fermées ne sont pas restaurées. Exportez avant de supprimer les audios ; les archives déjà exportées ne sont pas effacées par la suppression locale.
+Les réglages permettent de récupérer les audios conservés après une fermeture de l’application, puis de les exporter. Les transcriptions sauvegardées avec les segments sont récupérables ; les anciennes analyses et cartes non exportées ne sont pas restaurées. Exportez avant de supprimer les audios ; les archives déjà exportées ne sont pas effacées par la suppression locale.
 
 Cette conservation audio et cet export ZIP sont intégrés au moteur Android. Le moteur de bureau conserve son fonctionnement de transcription par extraits sans cette conservation longue durée.
 

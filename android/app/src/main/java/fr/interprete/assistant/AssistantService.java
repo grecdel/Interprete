@@ -80,7 +80,10 @@ public final class AssistantService extends Service {
                 if(!retain)return null;
                 org.json.JSONObject clip=app.audioStore.save(wav,start,duration,recordingId);app.emit(Json.object("event","audio","clip",clip));return clip;
             }
-            public void text(String value,org.json.JSONObject clip) {if(!destroyed)app.emit(Json.object("event","text","text",value,"audio_ref",clip));}
+            public void text(String value,org.json.JSONObject clip) {
+                if(clip!=null)try{app.audioStore.transcript(clip.optString("id"),value);}catch(Exception error){if(!destroyed)app.emit(Json.object("event","storageWarning","message","La transcription n’a pas pu être conservée avec l’audio. Exportez cette session avant de fermer."));}
+                if(!destroyed)app.emit(Json.object("event","text","text",value,"audio_ref",clip));
+            }
             public void text(String text) { if (!destroyed) { if (wakeLock.isHeld()) wakeLock.acquire(60 * 60 * 1000L); app.emit(Json.object("event", "text", "text", text)); } }
             public void error(String message) { if (!destroyed) { app.reject(startRequest, message); app.emit(Json.object("event", "microphoneError", "message", message)); } }
             public void drained() { main.post(() -> { if (!destroyed) { releaseWakeLock(); foreground(false); stopIfIdle(); } }); }

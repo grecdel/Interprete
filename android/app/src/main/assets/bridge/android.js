@@ -27,6 +27,7 @@
     } else if (event.event === 'text') {
       if (microphone) microphone.onText(event.text,event.audio_ref);
       else if (window.acceptSpeech) window.acceptSpeech(event.text,event.audio_ref);
+    } else if(event.event === 'storageWarning') { document.getElementById('archive-status').textContent=event.message;
     } else if (event.event === 'audio') {
       const clips=window.InterpreteArchive.session.audio; if(!clips.some(clip=>clip.id===event.clip.id))clips.push(event.clip);
     } else if (event.event === 'microphoneError') {
@@ -83,7 +84,7 @@
     };document.getElementById('archive-tray').append(bundle);
     const settings = document.getElementById('settings-tray');
     const recover=document.createElement('button');recover.type='button';recover.textContent='Récupérer les audios conservés sur ce téléphone';
-    recover.onclick=async()=>{try{const result=await call('audioInventory');const clips=window.InterpreteArchive.session.audio;for(const clip of result.clips||[])if(!clips.some(value=>value.id===clip.id))clips.push(clip);document.getElementById('settings-status').textContent=clips.length+' extraits disponibles pour export ZIP. Les transcriptions de sessions fermées ne sont pas restaurées.';}catch(error){document.getElementById('settings-status').textContent=error.message;}};
+    recover.onclick=async()=>{try{const result=await call('audioInventory');const clips=window.InterpreteArchive.session.audio;for(const clip of (result.clips||[]).sort((a,b)=>a.captured_at.localeCompare(b.captured_at))){if(!clips.some(value=>value.id===clip.id))clips.push(clip);if(clip.transcript&&!window.InterpreteArchive.session.transcript.some(fragment=>fragment.audio_ref?.id===clip.id))window.InterpreteArchive.recordTranscript(clip.transcript,clip);}document.getElementById('settings-status').textContent=clips.length+' extraits disponibles pour export ZIP. Les transcriptions conservées sont récupérées ; les anciennes analyses ne sont pas restaurées.';}catch(error){document.getElementById('settings-status').textContent=error.message;}};
     const clear=document.createElement('button');clear.type='button';clear.textContent='Supprimer les audios conservés';clear.onclick=async()=>{if(!confirm('Supprimer définitivement tous les audios de ce téléphone ? Exportez d’abord le dossier ZIP.'))return;try{await call('clearAudio');window.InterpreteArchive.session.audio=[];document.getElementById('settings-status').textContent='Audios locaux supprimés. Les exports existants restent inchangés.';}catch(error){document.getElementById('settings-status').textContent=error.message;}};
     settings.append(recover,clear);
 
