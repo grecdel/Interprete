@@ -22,7 +22,7 @@ def main():
     parser.add_argument('--unsigned-dir', required=True, type=Path)
     parser.add_argument('--signed-dir', required=True, type=Path)
     args = parser.parse_args()
-    version = '0.5.0'
+    version = '0.6.0'
     signed = args.signed_dir / f'Interprete-{version}-android.apk'
     unsigned = args.unsigned_dir / f'Interprete-{version}-unsigned.apk'
     if payload(signed) != payload(unsigned):

@@ -117,9 +117,14 @@ class BrowserChecks(unittest.TestCase):
             self.page.wait_for_timeout(150)
             self.assertNotEqual(before, orb.evaluate('el => getComputedStyle(el).transform'))
             self.assertEqual(self.page.locator('#bubble .orb-data').is_visible(), theme == 'matrix')
+            particles = self.page.locator('#bubble .orb-particle')
+            expect(particles).to_have_count(18)
+            before = particles.first.evaluate('el => getComputedStyle(el).transform')
+            self.page.wait_for_timeout(100)
+            self.assertNotEqual(before, particles.first.evaluate('el => getComputedStyle(el).transform'))
         self.assertEqual(len(colors), 4)
         self.page.emulate_media(reduced_motion='reduce')
-        for selector in ['.orb-ribbon', '.orb-data', '.bubble-aura', '.bubble-face .orb-core']:
+        for selector in ['.orb-ribbon', '.orb-data', '.orb-particle', '.bubble-aura', '.bubble-face .orb-core']:
             self.assertEqual(self.page.locator('#bubble ' + selector).first.evaluate(
                 'el => getComputedStyle(el).animationName'), 'none')
 

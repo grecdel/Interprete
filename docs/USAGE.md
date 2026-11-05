@@ -8,7 +8,7 @@ Quand le volet est ouvert, la même bulle se place en haut au centre et reste an
 
 Dans le volet, l’en-tête donne accès aux **réglages**, à l’**archive** et à la réduction. La commande **micro** se trouve au-dessus du fil. Le **fil des vérifications** contient les analyses, sources et pistes de relance. La **zone de saisie** permet de vérifier une phrase, un article ou un lien. Le bouton **Dossier d’enquête** ouvre les documents et les connecteurs ; les outils locaux de lecture et calcul se déplient dans le volet.
 
-Choisir l’ambiance dans le sélecteur de thème : pastel (eau), sombre (électricité violette), Matrix (données numériques) ou enquête (fumée). La matière de la bulle change immédiatement avec le thème. Réduire le volet arrête le micro. Sur Android, la touche Accueil peut laisser continuer une écoute déjà démarrée ; utiliser les commandes de la notification pour la mettre en pause ou arrêter l’assistant.
+Choisir l’ambiance dans le sélecteur de thème : pastel (eau), sombre (électricité violette), Matrix (données numériques) ou enquête (fumée). La matière de la bulle et ses particules orbitales changent immédiatement avec le thème. La préférence système de réduction des animations arrête aussi les particules. Réduire le volet arrête le micro. Sur Android, la touche Accueil peut laisser continuer une écoute déjà démarrée ; utiliser les commandes de la notification pour la mettre en pause ou arrêter l’assistant.
 
 ## Exemple 1 — Interview en direct
 

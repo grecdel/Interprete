@@ -250,3 +250,13 @@ body, .android-mode { background:var(--canvas); }
 :is([data-theme=dark],[data-theme=matrix]) .assistant-panel :is(.listen-button,.input-shell,.empty-symbol,.live-preview,.composer) { background:var(--surface);border-color:var(--line);color:var(--ink); }
 :is([data-theme=dark],[data-theme=matrix]) .assistant-panel .listen-button:hover { background:var(--canvas); }
 .orb-ribbon { mask-image:radial-gradient(ellipse,transparent 24%,#000 60%); }
+
+.bubble-face { container-type:size; }
+/* Lightweight orbital particles; no canvas loop or external dependency. */
+.orb-particle { position:absolute;left:50%;top:50%;width:2px;height:2px;border-radius:50%;background:var(--orb-hot);box-shadow:0 0 4px var(--orb-light);transform-origin:0 0;animation:orb-particle-orbit calc(7s + var(--p) * .3s) linear infinite;animation-delay:calc(var(--p) * -.67s);opacity:.8; }
+[data-theme=matrix] .orb-particle { border-radius:0;width:2px;height:3px;animation-timing-function:steps(40); }
+[data-theme=investigation] .orb-particle { width:4px;height:4px;filter:blur(1px);opacity:.35; }
+[data-theme=pastel] .orb-particle { background:transparent;border:1px solid var(--orb-hot);width:3px;height:3px; }
+@keyframes orb-particle-orbit { 0%{transform:rotate(0deg) translateX(42cqw) scale(.5);opacity:.15}25%{opacity:.9}50%{transform:rotate(180deg) translateX(25cqw) scale(1);opacity:.5}75%{opacity:.9}100%{transform:rotate(360deg) translateX(42cqw) scale(.5);opacity:.15} }
+.companion.is-open .archive-tray { top:158px;max-height:calc(100% - 178px); }
+@media(prefers-reduced-motion:reduce){.orb-particle{animation:none!important;transform:rotate(calc(var(--p) * 20deg)) translateX(40cqw);opacity:.35;}}

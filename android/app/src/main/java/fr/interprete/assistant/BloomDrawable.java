@@ -59,6 +59,16 @@ final class BloomDrawable extends Drawable {
             paint.setStyle(Paint.Style.FILL);paint.setColor(colors[0]);paint.setAlpha(180);paint.setTypeface(android.graphics.Typeface.MONOSPACE);paint.setTextSize(radius*.22f);
             for(int row=0;row<5;row++)canvas.drawText(row%2==0?"01 10":"10 01",cx-radius*.55f,cy-radius*.5f+((row+phase*2)%5)*radius*.25f,paint);
         }
+        paint.setShader(null);paint.setStyle(Paint.Style.FILL);
+        for(int i=0;i<18;i++) {
+            double angle=phase*Math.PI*2*(1+i%3*.2)+i*Math.PI/9;
+            float distance=radius*(.55f+.3f*(float)Math.sin(angle*.6+i));
+            float x=cx+(float)Math.cos(angle)*distance,y=cy+(float)Math.sin(angle)*distance;
+            paint.setColor(colors[i%3]);paint.setAlpha(material.equals("investigation")?65:185);
+            float size=radius*(material.equals("investigation")?.045f:.025f);
+            if(material.equals("matrix"))canvas.drawRect(x-size,y-size,x+size,y+size,paint);
+            else canvas.drawCircle(x,y,size,paint);
+        }
         canvas.restore();paint.setShader(null);paint.setStyle(Paint.Style.STROKE);paint.setStrokeWidth(radius*.025f);paint.setColor(colors[0]);paint.setAlpha(200);canvas.drawCircle(cx,cy,radius*.98f,paint);
         paint.setStyle(Paint.Style.FILL);paint.setAlpha(255);
 
