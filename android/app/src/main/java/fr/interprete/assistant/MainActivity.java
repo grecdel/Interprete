@@ -89,7 +89,7 @@ public final class MainActivity extends Activity implements InterpreteApp.EventS
             }
         });
         root.addView(web, new FrameLayout.LayoutParams(-1, -1)); setContentView(root);
-        startOnOpen = getIntent().getBooleanExtra("listen_on_open", false);
+        startOnOpen = consumeListenIntent(getIntent());
         if (Build.VERSION.SDK_INT >= 33) getOnBackInvokedDispatcher().registerOnBackInvokedCallback(0, this::back);
         web.loadUrl(ORIGIN);
     }
@@ -98,7 +98,7 @@ public final class MainActivity extends Activity implements InterpreteApp.EventS
         if (!"https".equalsIgnoreCase(uri.getScheme()) && !"http".equalsIgnoreCase(uri.getScheme())) return;
         try { startActivity(new Intent(Intent.ACTION_VIEW, uri)); } catch (Exception ignored) { }
     }
-    @Override protected void onNewIntent(Intent intent) { super.onNewIntent(intent); setIntent(intent); startOnOpen = intent.getBooleanExtra("listen_on_open", false); if (ready) opened(); }
+    @Override protected void onNewIntent(Intent intent) { super.onNewIntent(intent); setIntent(intent); startOnOpen = consumeListenIntent(intent); if (ready) opened(); }
     @Override protected void onResume() {
         super.onResume(); app.activityVisible = true;
         boolean requested = getPreferences(MODE_PRIVATE).getBoolean("overlay_requested", false);
@@ -112,6 +112,10 @@ public final class MainActivity extends Activity implements InterpreteApp.EventS
         if (app.service != null) app.service.refreshBubble();
         if (ready) opened();
     }
+    private boolean consumeListenIntent(Intent intent) {
+        boolean listen = intent.getBooleanExtra("listen_on_open", false) && app.launchToken.equals(intent.getStringExtra("listen_token"));
+        intent.removeExtra("listen_on_open"); intent.removeExtra("listen_token"); return listen;
+    }
     private void opened() {
         app.emit(Json.object("event", "open", "listen", startOnOpen)); startOnOpen = false;
     }
@@ -123,7 +127,7 @@ public final class MainActivity extends Activity implements InterpreteApp.EventS
         if (!ready || isDestroyed()) return;
         web.evaluateJavascript("window.InterpreteAndroidReceive(" + JSONObject.quote(event.toString()) + ")", null);
     }
-    final class Bridge {
+    public final class Bridge {
         @JavascriptInterface public void postMessage(String raw) {
             if (raw == null || raw.length() > 16 * 1024 * 1024) return;
             try {
@@ -162,6 +166,7 @@ public final class MainActivity extends Activity implements InterpreteApp.EventS
                 archiveRequest = data; archiveId = id;
                 Intent save = new Intent(Intent.ACTION_CREATE_DOCUMENT).addCategory(Intent.CATEGORY_OPENABLE).setType(ext.equals("html") ? "text/html" : "application/json");
                 save.putExtra(Intent.EXTRA_TITLE, "interprete-" + java.time.LocalDate.now() + "." + ext); startActivityForResult(save, ARCHIVE); break;
+            case "viewArchive": showArchive(); app.resolve(id, new JSONObject()); break;
             case "copy":
                 String text = Json.string(data, "text", 10000); ClipData clip = ClipData.newPlainText("Interprete", text);
                 PersistableBundle privateClip = new PersistableBundle(); privateClip.putBoolean("android.content.extra.IS_SENSITIVE", true); clip.getDescription().setExtras(privateClip);
@@ -214,9 +219,32 @@ public final class MainActivity extends Activity implements InterpreteApp.EventS
             network.execute(() -> {
                 try (OutputStream output = getContentResolver().openOutputStream(destination, "wt")) {
                     if (output == null) throw new IllegalStateException("Fichier indisponible.");
-                    output.write(saved.optString("content").getBytes(StandardCharsets.UTF_8)); app.resolve(id, Json.object("saved", true));
+                    output.write(saved.optString("content").getBytes(StandardCharsets.UTF_8));
+                    if ("html".equals(saved.optString("extension"))) app.lastArchive = saved.optString("content");
+                    app.resolve(id, Json.object("saved", true));
                 } catch (Exception ignored) { app.reject(id, "L’archive n’a pas pu être enregistrée. La session reste disponible."); }
             });
+        }
+    }
+    private void showArchive() {
+        if (app.lastArchive.isEmpty()) throw new IllegalStateException("Exportez d’abord un compte rendu HTML.");
+        android.app.Dialog dialog = new android.app.Dialog(this, android.R.style.Theme_Material_Light_NoActionBar);
+        android.widget.LinearLayout root = new android.widget.LinearLayout(this); root.setOrientation(android.widget.LinearLayout.VERTICAL);
+        root.setBackgroundColor(Color.rgb(247,246,249));
+        WebView viewer = new WebView(this); viewer.getSettings().setJavaScriptEnabled(true); viewer.getSettings().setAllowFileAccess(false); viewer.getSettings().setAllowContentAccess(false);
+        viewer.getSettings().setMixedContentMode(WebSettings.MIXED_CONTENT_NEVER_ALLOW);
+        viewer.setWebViewClient(new WebViewClient() {
+            @Override public boolean shouldOverrideUrlLoading(WebView view, WebResourceRequest request) { if (request.getUrl().toString().startsWith("https://archive.interprete.local/#")) return false; openExternal(request.getUrl()); return true; }
+            @Override public WebResourceResponse shouldInterceptRequest(WebView view, WebResourceRequest request) { return blocked(); }
+        });
+        String html = app.lastArchive.replace("<head>", "<head><meta http-equiv=\"Content-Security-Policy\" content=\"default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; img-src data:;\"><style>#print{display:none}</style>");
+        viewer.loadDataWithBaseURL("https://archive.interprete.local/", html, "text/html", "UTF-8", null);
+        root.addView(viewer, new android.widget.LinearLayout.LayoutParams(-1, 0, 1));
+        android.widget.Button close = new android.widget.Button(this); close.setText("Fermer le compte rendu"); close.setOnClickListener(view -> dialog.dismiss()); root.addView(close);
+        dialog.setContentView(root); dialog.setOnDismissListener(ignored -> viewer.destroy()); dialog.show();
+        if (dialog.getWindow() != null) {
+            dialog.getWindow().setLayout(-1, -1);
+            if (Build.VERSION.SDK_INT >= 30) { dialog.getWindow().setDecorFitsSystemWindows(false); root.setOnApplyWindowInsetsListener((view, insets) -> { android.graphics.Insets safe = insets.getInsets(WindowInsets.Type.systemBars() | WindowInsets.Type.displayCutout()); view.setPadding(safe.left, safe.top, safe.right, safe.bottom); return insets; }); root.requestApplyInsets(); }
         }
     }
     private void confirmQuit() {

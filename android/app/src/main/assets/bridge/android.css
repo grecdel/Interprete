@@ -9,3 +9,5 @@
 .android-mode .source-title, .android-mode .source-domain { font-size: 11px; }
 .android-mode textarea { font-size: 16px; }
 @media(max-height:600px) { .android-mode .assistant-panel { bottom: 72px; }.android-mode .feed { min-height: 35px; }.android-mode .listen-copy>span { display: none; }.android-mode .bubble-dock { bottom: 13px; } }
+
+.android-mode #android-archive-preview { width:100%; padding:10px; margin-top:12px; border:1px solid #d7cbe5; border-radius:7px; background:#f4eef8; color:#937aa5; font-size:11px; }

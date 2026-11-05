@@ -8,6 +8,8 @@ import java.util.ArrayDeque;
 
 public final class InterpreteApp extends Application {
     interface EventSink { void receive(JSONObject event); }
+    final String launchToken = java.util.UUID.randomUUID().toString();
+    volatile String lastArchive = "";
     KeyVault vault;
     private NativeApi api;
     private MicrophoneEngine.Factory audioFactory = MicrophoneEngine::androidSource;

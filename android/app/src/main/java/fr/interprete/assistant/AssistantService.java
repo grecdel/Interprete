@@ -98,7 +98,7 @@ public final class AssistantService extends Service {
                         return true;
                     }
                     if (event.getAction() == MotionEvent.ACTION_UP) {
-                        if (!dragged) { view.performClick(); Intent open = new Intent(AssistantService.this, MainActivity.class).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_SINGLE_TOP); open.putExtra("listen_on_open", engine == null || !engine.isRecording()); startActivity(open); }
+                        if (!dragged) { view.performClick(); Intent open = new Intent(AssistantService.this, MainActivity.class).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_SINGLE_TOP); open.putExtra("listen_on_open", engine == null || !engine.isRecording()); open.putExtra("listen_token", app.launchToken); startActivity(open); }
                         return true;
                     }
                     return false;

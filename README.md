@@ -2,7 +2,7 @@
 <h1 align="center">Interprete</h1>
 <p align="center"><strong>Une bulle pendant l’interview. Des pistes pour rebondir. Une archive pour tout relire.</strong></p>
 <p align="center">
-  <a href="https://github.com/grecdel/Interprete/releases/latest">Télécharger pour Linux</a> ·
+  <a href="https://github.com/grecdel/Interprete/releases/tag/v0.2.0">Télécharger pour Linux</a> ·
   <a href="docs/DESKTOP.md">Premiers pas</a> ·
   <a href="docs/DEVELOPMENT.md">Développer</a>
 </p>
@@ -15,6 +15,12 @@
 ![Interprete : aperçu de l’application Linux native, avec données fictives de présentation](docs/assets/hero.png)
 
 > **Prototype expérimental.** Interprete propose des éléments à vérifier, pas une vérité garantie. Les conclusions, citations et connexions doivent être contrôlées avant une relance factuelle à l’antenne. Les captures ci-dessus et ci-dessous utilisent des **données fictives de démonstration**.
+
+## Sur Android aussi
+
+Une version Android autonome est préparée dans [les versions publiées](https://github.com/grecdel/Interprete/releases). Elle utilise le micro et une bulle optionnelle, avec les autorisations Android et une notification visible pendant l’écoute. La clé se saisit dans l’application ; aucun serveur Linux n’est nécessaire.
+
+→ [Guide Android : installation, permissions, bulle et archives](docs/ANDROID.md)
 
 ## Une application à ouvrir, simplement
 

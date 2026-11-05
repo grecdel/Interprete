@@ -1,7 +1,7 @@
 'use strict';
 (() => {
   const pending = new Map(), opened = [];
-  let nextId = 0, microphone;
+  let nextId = 0, microphone, preview;
   function call(action, data = {}, timeout = 120000) {
     return new Promise((resolve, reject) => {
       const id = 'rpc_' + (++nextId);
@@ -40,7 +40,7 @@
     saveKey: (key, remember) => call('saveKey', {key, remember}),
     setPanelOpen: open => { call('panel', {open}).catch(() => {}); },
     setUnsaved: value => { call('unsaved', {value}).catch(() => {}); },
-    saveArchive: (content, extension, name) => call('archive', {content, extension, name}, 300000).then(result => result.saved),
+    saveArchive: (content, extension, name) => call('archive', {content, extension, name}, 300000).then(result => { if (result.saved && extension === 'html' && preview) preview.hidden = false; return result.saved; }),
     copyText: text => call('copy', {text}),
     quit: () => { call('quit').catch(() => {}); },
     onOpen: callback => opened.push(callback)
@@ -55,6 +55,8 @@
   };
   document.addEventListener('DOMContentLoaded', () => {
     document.body.classList.add('android-mode');
+    preview = document.createElement('button'); preview.id = 'android-archive-preview'; preview.type = 'button'; preview.hidden = true; preview.textContent = 'Voir le dernier compte rendu';
+    preview.onclick = () => call('viewArchive').catch(() => {}); document.getElementById('archive-tray').append(preview);
     const settings = document.getElementById('settings-tray');
     const button = document.createElement('button'); button.id = 'android-overlay'; button.type = 'button'; button.dataset.enabled = 'false';
     const status = document.createElement('p'); status.id = 'android-overlay-status';
