@@ -35,3 +35,12 @@ Le glossaire local explique une quinzaine de termes économiques et statistiques
 Les dépendances npm sont fixées dans le lockfile. Les moteurs, workers et modèles sont distribués localement ; aucun CDN n’est nécessaire au traitement des documents.
 
 - OCR Android : ML Kit Text Recognition Latin 16.0.1, modèle embarqué, sans envoi de l’image à un service OCR distant.
+
+
+## Thèmes et bulle Android
+
+La sélection du thème est mémorisée dans le stockage local de la WebView. La bulle native au-dessus des autres applications reprend les couleurs pastel, sombre, Matrix ou enquête et une floraison animée locale. L’animation respecte la désactivation des animations du système Android. La partie web respecte également la préférence de réduction des animations.
+
+## Validation
+
+Les connecteurs publics ont répondu à des requêtes de test générales. Les scénarios navigateur couvrent les dossiers, le PDF/OCR réel sur documents fictifs, les outils locaux et les liens audio. Le parcours Android vérifie le PDF, l’OCR natif, l’export ZIP et l’enregistrement hors ligne avec source audio et réponses OpenAI simulées. Aucun test de fidélité d’un microphone réel ni de fonctionnement continu pendant trois heures n’a encore été réalisé.

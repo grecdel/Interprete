@@ -62,6 +62,7 @@ public class AndroidSmokeTest {
         try (ActivityScenario<MainActivity> scenario = ActivityScenario.launch(new Intent(app, MainActivity.class).putExtra("listen_on_open", true))) {
             until(scenario, "!!document.getElementById('settings-tray') && !document.getElementById('settings-tray').hidden");
             assertNull("Une Intent externe ne doit pas démarrer le micro.", app.service);
+            until(scenario,"!!document.getElementById('evidence-files') && !document.getElementById('evidence-files').disabled");
             js(scenario, "document.getElementById('api-key').value='fake-key-used-only-in-android-tests';document.getElementById('remember-key').checked=true;document.getElementById('key-form').requestSubmit();true");
             until(scenario, "document.getElementById('settings-status').textContent.includes('Clé configurée')");
             assertEquals("\"\"", js(scenario, "document.getElementById('api-key').value"));

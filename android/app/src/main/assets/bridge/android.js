@@ -44,6 +44,7 @@
     request: (path, body) => call('request', {path, body}),
     transcribe: () => Promise.reject(new Error('Utilisez la capture Android native.')),
     settings: () => call('settings'),
+    setTheme: theme => call('theme',{theme}),
     extractImage: async file => {const encoded=await new Promise((resolve,reject)=>{const reader=new FileReader();reader.onload=()=>resolve(reader.result.split(',')[1]);reader.onerror=reject;reader.readAsDataURL(file);});return call('extractImage',{base64:encoded},120000);},
     saveKey: (key, remember) => call('saveKey', {key, remember}),
     setPanelOpen: open => { call('panel', {open}).catch(() => {}); },

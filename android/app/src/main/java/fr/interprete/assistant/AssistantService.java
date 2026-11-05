@@ -107,8 +107,8 @@ public final class AssistantService extends Service {
                 Intent open = new Intent(AssistantService.this, MainActivity.class).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_SINGLE_TOP);
                 open.putExtra("listen_on_open", engine == null || !engine.isRecording()); open.putExtra("listen_token", app.launchToken); startActivity(open);
             });
-            GradientDrawable background = new GradientDrawable(GradientDrawable.Orientation.TL_BR, new int[]{Color.rgb(214,199,235), Color.rgb(130,107,174)});
-            background.setShape(GradientDrawable.OVAL); bubble.setBackground(background); bubble.setPadding(dp(16), dp(16), dp(16), dp(16)); bubble.setElevation(dp(6));
+            BloomDrawable background = new BloomDrawable(getSharedPreferences("preferences",MODE_PRIVATE).getString("theme","pastel"));
+            bubble.setBackground(background); bubble.setPadding(dp(16), dp(16), dp(16), dp(16)); bubble.setElevation(dp(6));
             position = new WindowManager.LayoutParams(dp(62), dp(62), WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY, WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE, PixelFormat.TRANSLUCENT);
             position.gravity = Gravity.TOP | Gravity.START;
             position.x = getResources().getDisplayMetrics().widthPixels - dp(78); position.y = getResources().getDisplayMetrics().heightPixels / 2;
@@ -129,11 +129,11 @@ public final class AssistantService extends Service {
                     return false;
                 }
             });
-            try { windows.addView(bubble, position); } catch (SecurityException error) { bubble = null; }
+            try { windows.addView(bubble, position); background.start(); } catch (SecurityException error) { bubble = null; }
         } else if (!visible && bubble != null) removeBubble();
         stopIfIdle();
     }
-    private void removeBubble() { if (bubble != null) { try { windows.removeView(bubble); } catch (IllegalArgumentException ignored) { } bubble = null; } }
+    private void removeBubble() { if (bubble != null) { if(bubble.getBackground() instanceof BloomDrawable)((BloomDrawable)bubble.getBackground()).stop(); try { windows.removeView(bubble); } catch (IllegalArgumentException ignored) { } bubble = null; } }
     private int dp(int value) { return Math.round(value * getResources().getDisplayMetrics().density); }
     private void stopIfIdle() { if (!overlayEnabled() && (engine == null || !engine.isBusy())) stopSelf(); }
     private void foreground(boolean microphone) {

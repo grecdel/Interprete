@@ -58,7 +58,7 @@ public final class MainActivity extends Activity implements InterpreteApp.EventS
         }
         web = new WebView(this); web.setBackgroundColor(Color.rgb(243,241,248));
         WebView.setWebContentsDebuggingEnabled(BuildConfig.DEBUG);
-        WebSettings settings = web.getSettings(); settings.setJavaScriptEnabled(true); settings.setDomStorageEnabled(false);
+        WebSettings settings = web.getSettings(); settings.setJavaScriptEnabled(true); settings.setDomStorageEnabled(true);
         settings.setAllowFileAccess(false); settings.setAllowContentAccess(true); settings.setMixedContentMode(WebSettings.MIXED_CONTENT_NEVER_ALLOW);
         settings.setJavaScriptCanOpenWindowsAutomatically(false); settings.setSupportMultipleWindows(false);
         web.addJavascriptInterface(new Bridge(), "InterpreteNative");
@@ -167,6 +167,13 @@ public final class MainActivity extends Activity implements InterpreteApp.EventS
                         catch (Exception error) { app.resolve(id, Json.object("ok", false, "status", 502, "body", Json.object("error", MicrophoneEngine.safeMessage(error)))); } });
                 } else app.reject(id, "Requête refusée.");
                 break;
+            case "theme":
+                String theme=data.optString("theme");if(!java.util.Arrays.asList("pastel","dark","matrix","investigation").contains(theme)){app.reject(id,"Thème inconnu.");break;}
+                getSharedPreferences("preferences",MODE_PRIVATE).edit().putString("theme",theme).apply();
+                int background=Color.parseColor(theme.equals("dark")?"#10131d":theme.equals("matrix")?"#030c08":theme.equals("investigation")?"#e9dfca":"#f3eff9");
+                web.setBackgroundColor(background);((android.view.View)web.getParent()).setBackgroundColor(background);
+                if(Build.VERSION.SDK_INT>=30&&getWindow().getInsetsController()!=null) {int light=android.view.WindowInsetsController.APPEARANCE_LIGHT_STATUS_BARS|android.view.WindowInsetsController.APPEARANCE_LIGHT_NAVIGATION_BARS;getWindow().getInsetsController().setSystemBarsAppearance(theme.equals("dark")||theme.equals("matrix")?0:light,light);}
+                app.resolve(id,new JSONObject());break;
             case "settings": app.resolve(id, Json.object("canRemember", app.vault.available(), "hasSavedKey", app.vault.remembered(), "overlayEnabled", getSharedPreferences("preferences", MODE_PRIVATE).getBoolean("overlay", false) && Settings.canDrawOverlays(this))); break;
             case "saveKey": network.execute(() -> { try { app.vault.save(data.optString("key"), data.optBoolean("remember")); app.resolve(id, Json.object("configured", true)); } catch (Exception error) { app.reject(id, MicrophoneEngine.safeMessage(error)); } }); break;
             case "startMic": microphoneOptions=data; requestMicrophone(id); break;

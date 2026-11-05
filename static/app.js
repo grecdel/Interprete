@@ -510,6 +510,7 @@ refreshConfiguration().then(() => { scheduleLive(); if (desktop && !configured) 
   function apply(value) {
     const theme = Object.hasOwn(themes, value) ? value : 'pastel';
     document.documentElement.dataset.theme = theme; select.value = theme;
+    window.interpreteDesktop?.setTheme?.(theme)?.catch(() => {});
     document.querySelector('meta[name="theme-color"]')?.setAttribute('content', theme === 'pastel' ? '#f3eff9' : theme === 'matrix' ? '#030c08' : '#10131d');
   }
   let saved = 'pastel'; try { saved = localStorage.getItem('interprete-theme') || saved; } catch {}
