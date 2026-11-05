@@ -14,6 +14,7 @@ import android.os.Bundle;
 import android.os.PersistableBundle;
 import android.provider.Settings;
 import android.view.WindowInsets;
+import android.view.KeyEvent;
 import android.webkit.JavascriptInterface;
 import android.webkit.PermissionRequest;
 import android.webkit.ValueCallback;
@@ -122,7 +123,15 @@ public final class MainActivity extends Activity implements InterpreteApp.EventS
     @Override protected void onStop() { app.activityVisible = false; if (app.service != null) app.service.refreshBubble(); super.onStop(); }
     @Override protected void onDestroy() { app.detach(this); if (filePicker != null) filePicker.onReceiveValue(null); web.removeJavascriptInterface("InterpreteNative"); web.destroy(); network.shutdown(); super.onDestroy(); }
     private void back() { if (ready) web.evaluateJavascript("document.getElementById('companion').dispatchEvent(new KeyboardEvent('keydown',{key:'Escape',bubbles:true}))", null); else moveTaskToBack(true); }
-    @SuppressWarnings("deprecation") @Override public void onBackPressed() { back(); }
+    // API 33+ uses the native gesture callback above. Older releases send key events.
+    @Override public boolean onKeyDown(int code, KeyEvent event) {
+        if (Build.VERSION.SDK_INT < 33 && code == KeyEvent.KEYCODE_BACK) { event.startTracking(); return true; }
+        return super.onKeyDown(code, event);
+    }
+    @Override public boolean onKeyUp(int code, KeyEvent event) {
+        if (Build.VERSION.SDK_INT < 33 && code == KeyEvent.KEYCODE_BACK && !event.isCanceled()) { back(); return true; }
+        return super.onKeyUp(code, event);
+    }
     @Override public void receive(JSONObject event) {
         if (!ready || isDestroyed()) return;
         web.evaluateJavascript("window.InterpreteAndroidReceive(" + JSONObject.quote(event.toString()) + ")", null);
@@ -240,7 +249,7 @@ public final class MainActivity extends Activity implements InterpreteApp.EventS
         String html = app.lastArchive.replace("<head>", "<head><meta http-equiv=\"Content-Security-Policy\" content=\"default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; img-src data:;\"><style>#print{display:none}</style>");
         viewer.loadDataWithBaseURL("https://archive.interprete.local/", html, "text/html", "UTF-8", null);
         root.addView(viewer, new android.widget.LinearLayout.LayoutParams(-1, 0, 1));
-        android.widget.Button close = new android.widget.Button(this); close.setText("Fermer le compte rendu"); close.setOnClickListener(view -> dialog.dismiss()); root.addView(close);
+        android.widget.Button close = new android.widget.Button(this); close.setText(R.string.close_archive); close.setOnClickListener(view -> dialog.dismiss()); root.addView(close);
         dialog.setContentView(root); dialog.setOnDismissListener(ignored -> viewer.destroy()); dialog.show();
         if (dialog.getWindow() != null) {
             dialog.getWindow().setLayout(-1, -1);

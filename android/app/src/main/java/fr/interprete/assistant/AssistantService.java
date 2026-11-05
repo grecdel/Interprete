@@ -37,6 +37,10 @@ public final class AssistantService extends Service {
     private final Handler main = new Handler(Looper.getMainLooper());
     private String startRequest;
     private volatile boolean destroyed;
+    private static final class BubbleView extends ImageView {
+        BubbleView(android.content.Context context) { super(context); }
+        @Override public boolean performClick() { super.performClick(); return true; }
+    }
     @Override public void onCreate() {
         super.onCreate(); app = (InterpreteApp) getApplication(); app.service = this;
         windows = (WindowManager) getSystemService(WINDOW_SERVICE);
@@ -81,7 +85,11 @@ public final class AssistantService extends Service {
     void refreshBubble() {
         boolean visible = overlayEnabled() && Settings.canDrawOverlays(this) && !app.activityVisible;
         if (visible && bubble == null) {
-            bubble = new ImageView(this); bubble.setImageResource(R.drawable.ic_notification); bubble.setContentDescription("Ouvrir Interprete et écouter");
+            bubble = new BubbleView(this); bubble.setImageResource(R.drawable.ic_notification); bubble.setContentDescription("Ouvrir Interprete et écouter");
+            bubble.setOnClickListener(view -> {
+                Intent open = new Intent(AssistantService.this, MainActivity.class).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_SINGLE_TOP);
+                open.putExtra("listen_on_open", engine == null || !engine.isRecording()); open.putExtra("listen_token", app.launchToken); startActivity(open);
+            });
             GradientDrawable background = new GradientDrawable(GradientDrawable.Orientation.TL_BR, new int[]{Color.rgb(214,199,235), Color.rgb(130,107,174)});
             background.setShape(GradientDrawable.OVAL); bubble.setBackground(background); bubble.setPadding(dp(16), dp(16), dp(16), dp(16)); bubble.setElevation(dp(6));
             position = new WindowManager.LayoutParams(dp(62), dp(62), WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY, WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE, PixelFormat.TRANSLUCENT);
@@ -98,7 +106,7 @@ public final class AssistantService extends Service {
                         return true;
                     }
                     if (event.getAction() == MotionEvent.ACTION_UP) {
-                        if (!dragged) { view.performClick(); Intent open = new Intent(AssistantService.this, MainActivity.class).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_SINGLE_TOP); open.putExtra("listen_on_open", engine == null || !engine.isRecording()); open.putExtra("listen_token", app.launchToken); startActivity(open); }
+                        if (!dragged) view.performClick();
                         return true;
                     }
                     return false;

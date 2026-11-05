@@ -75,6 +75,7 @@ final class MicrophoneEngine {
     private void finishIfDrained() {
         List<Runnable> ready;
         synchronized (this) { if (!recorderDone || pending != 0) return; ready = new ArrayList<>(waiters); waiters.clear(); }
+        network.shutdown();
         for (Runnable waiter : ready) waiter.run(); listener.drained();
     }
     void close() { recording = false; Source captured = source; if (captured != null) try { captured.stop(); } catch (Exception ignored) { } network.shutdown(); }
