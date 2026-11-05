@@ -2,21 +2,21 @@
 
 ## Socle ajouté au code
 
-Le dossier d’enquête conserve les pièces dans IndexedDB sur l’appareil. Limites actuelles : 8 Mio par pièce, 64 Mio pour le dossier. Extraction locale des textes TXT, Markdown, CSV, JSON et sous-titres SRT/VTT ; aperçu limité à 200 000 caractères. Les PDF, images et autres formats peuvent être conservés mais leur contenu n’est pas encore extrait. Recherche dans les noms, notes et textes ; empreintes SHA-256 et dédoublonnage ; provenance renseignée par l’utilisateur ; association à une affirmation de la session ; préparation explicite d’un extrait à vérifier.
+Le dossier d’enquête conserve les pièces dans IndexedDB sur l’appareil. Limites actuelles : 8 Mio par pièce, 64 Mio pour le dossier. Extraction locale des textes TXT, Markdown, CSV, JSON et sous-titres SRT/VTT ; aperçu limité à 200 000 caractères. Les PDF peuvent être lus et leur texte extrait ; les images PNG/JPEG/WebP peuvent être traitées par OCR français/anglais local, au clic. Les autres formats sont conservables sans extraction spécifique. Voir les limites dans VERSION-0.4.md. Recherche dans les noms, notes et textes ; empreintes SHA-256 et dédoublonnage ; provenance renseignée par l’utilisateur ; association à une affirmation de la session ; préparation explicite d’un extrait à vérifier.
 
-L’export de session HTML/JSON conserve l’inventaire, le texte extrait et les annotations, pas les fichiers binaires originaux. Chaque pièce peut aussi être exportée séparément dans un conteneur JSON comprenant son original encodé en base64 et ses annotations ; ce conteneur se réimporte dans le dossier avec contrôle de l’empreinte. La bibliothèque est commune aux sessions sur cet appareil. Elle n’est pas une sauvegarde : effacer les données de l’application ou du navigateur peut l’effacer. Les empreintes ne prouvent pas l’authenticité d’un document. Les recherches externes existantes sont des liens, pas des connecteurs API.
+L’export de session HTML/JSON conserve l’inventaire, le texte extrait et les annotations, pas les fichiers binaires originaux. Chaque pièce peut aussi être exportée séparément dans un conteneur JSON comprenant son original encodé en base64 et ses annotations ; ce conteneur se réimporte dans le dossier avec contrôle de l’empreinte. La bibliothèque est commune aux sessions sur cet appareil. Elle n’est pas une sauvegarde : effacer les données de l’application ou du navigateur peut l’effacer. Les empreintes ne prouvent pas l’authenticité d’un document. Trois connecteurs API sont intégrés : Crossref, data.gouv.fr et l’Annuaire des entreprises. Les autres raccourcis de recherche sont des liens externes. Les notices enregistrées ne remplacent pas la lecture du document original.
 
 ## Connecteurs proposés
 
-Les capacités ci-dessous sont des propositions d’intégration. Vérifier les conditions, quotas, licences et disponibilités actuelles avant activation ; ne pas promettre une API universelle ou gratuite. Les fichiers privés ne sont pas transmis à ces services sans action explicite.
+Les capacités ci-dessous comprennent les trois connecteurs intégrés et les propositions restantes, indiquées dans la colonne de droite. Vérifier les conditions, quotas, licences et disponibilités actuelles avant activation ; ne pas promettre une API universelle ou gratuite. Les fichiers privés ne sont pas transmis à ces services sans action explicite.
 
 | Service / outil connu | Usage dans Interprete | Mode d’intégration envisagé / contrainte |
 | --- | --- | --- |
 | INSEE / Eurostat | Séries statistiques, dates, périmètres, unités | API officielles selon jeu ; certaines API INSEE requièrent un compte |
-| data.gouv.fr | Jeux de données publics français | API du catalogue ; conserver licence, producteur et version |
+| data.gouv.fr | Jeux de données publics français | **Intégré** : API du catalogue ; conserver licence, producteur et version |
 | Légifrance / PISTE | Textes de loi et versions applicables à une date | API avec accès PISTE ; ne pas confondre texte actuel et texte historique |
 | EUR-Lex / CELLAR | Droit et documents de l’Union européenne | Services officiels ; formats et accès à valider |
-| Crossref | DOI, métadonnées et liens des publications | API publique ; métadonnées, pas garantie d’accès au texte intégral |
+| Crossref | DOI, métadonnées et liens des publications | **Intégré** : API publique ; métadonnées, pas garantie d’accès au texte intégral |
 | OpenAlex | Publications, auteurs et références | API ; conditions de clé et quotas à vérifier |
 | PubMed / NCBI E-utilities | Littérature biomédicale | API ; limites de débit, clé selon usage |
 | Unpaywall | Localiser une version légalement ouverte d’un article | API avec adresse de contact ; ne contourne pas les paywalls |
@@ -24,7 +24,7 @@ Les capacités ci-dessous sont des propositions d’intégration. Vérifier les 
 | GDELT | Repérer une couverture médiatique et ses évolutions | API de découverte ; les articles restent à vérifier |
 | Wikidata | Identifier et désambiguïser personnes, lieux et organismes | SPARQL / API ; point de départ avec références à contrôler |
 | OpenCorporates | Identifier une société et ses liens publics | API avec accès/licence appropriés ; couverture variable |
-| Annuaire des entreprises / Sirene | Identifiants et établissements français | API officielle selon accès et restrictions de diffusion |
+| Annuaire des entreprises / Sirene | Identifiants et établissements français | **Intégré pour l’Annuaire des entreprises** via son API de recherche publique ; accès Sirene complet distinct |
 | OpenSanctions | Comparer des entités à des listes documentées | API / licence adaptée ; homonymie et faux positifs à traiter |
 | RDAP | Enregistrement d’un domaine et registre compétent | Protocoles/services publics ; données parfois masquées |
 | crt.sh | Certificats publics et noms de domaine associés | Consultation / accès à valider ; présence d’un nom ≠ attribution d’un propriétaire |
@@ -37,8 +37,8 @@ Les capacités ci-dessous sont des propositions d’intégration. Vérifier les 
 
 ## Outils à embarquer localement
 
-- PDF.js : lecture et extraction de PDF, sans contourner les restrictions d’accès.
-- Tesseract OCR : texte des scans, avec affichage de l’image et correction humaine.
+- PDF.js **intégré** : lecture et extraction de PDF, sans contourner les restrictions d’accès.
+- Tesseract OCR **intégré pour les images** : texte des scans, avec affichage de l’image et correction humaine.
 - ExifTool : métadonnées et provenance technique ; intégration bureau via processus isolé, adaptation Android distincte.
 - FFmpeg : découpage audio/vidéo et images clés ; vérifier la licence de la configuration distribuée et les limites mobiles.
 - Moteur SQLite FTS : index de dossiers volumineux, recherche hors ligne et filtres.
@@ -60,10 +60,10 @@ Les capacités ci-dessous sont des propositions d’intégration. Vérifier les 
 ## Ordre d’intégration
 
 1. Dossier local, provenance, empreintes, annotations et inventaire exporté : socle présent dans cette modification.
-2. Lecture PDF/OCR, export portable des originaux et index local complet.
-3. Connecteurs statistiques, juridiques et scientifiques avec cache daté et sources appelables.
-4. Conservation audio longue durée sur disque et synchronisation aux temps de capture.
-5. Fresque interactive, relecture des citations et comparaison de versions.
+2. Lecture PDF/OCR et export portable des pièces : intégrés ; index complet de grands corpus à développer.
+3. Crossref, data.gouv.fr et Annuaire des entreprises : intégrés avec notices conservables ; autres connecteurs statistiques et juridiques à développer.
+4. Conservation audio Android sur disque, association aux fragments et export ZIP : intégrés au code 0.4 ; synchronisation au mot non fournie.
+5. Tableau enquête et comparaison textuelle de citations : intégrés ; fresque chronologique complète et comparaison de versions à développer.
 6. Connecteurs spécialisés : entreprises, géographie, archives et médias, selon les accès obtenus.
 
-L’APK v0.3.0 déjà publié n’est pas remplacé par ces changements de code. Les connecteurs, l’audio long et la fresque ne doivent être annoncés comme disponibles qu’après leur implémentation et leurs essais sur chaque plateforme.
+La version Android 0.4 réunit ces ajouts. Les autres services du catalogue, l’alignement audio au mot et la fresque chronologique complète restent à développer. Consultez VERSION-0.4.md pour les limites, les plateformes concernées et la validation.

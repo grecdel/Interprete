@@ -1,111 +1,59 @@
 <p align="center"><img src="docs/assets/icon.png" width="72" alt="Icône Interprete"></p>
 <h1 align="center">Interprete</h1>
-<p align="center"><strong>Une bulle pendant l’interview. Des pistes pour rebondir. Une archive pour tout relire.</strong></p>
+<p align="center"><strong>Une bulle pendant l’interview. Des pistes pour rebondir. Un dossier pour tout relire.</strong></p>
 <p align="center">
-  <a href="https://github.com/grecdel/Interprete/releases/tag/v0.2.0">Télécharger pour Linux</a> ·
-  <a href="https://github.com/grecdel/Interprete/releases/tag/v0.4.0">Télécharger pour Android</a> ·
-  <a href="docs/DESKTOP.md">Premiers pas</a> ·
-  <a href="docs/DEVELOPMENT.md">Développer</a>
-</p>
-<p align="center">
-  <img src="https://img.shields.io/badge/statut-prototype-9b83ba" alt="Statut : prototype">
-  <img src="https://img.shields.io/badge/bureau-Linux_x86__64-85789d" alt="Linux x86_64">
-  <a href="https://github.com/grecdel/Interprete/actions/workflows/build-linux.yml"><img src="https://github.com/grecdel/Interprete/actions/workflows/build-linux.yml/badge.svg" alt="Compilation et tests Linux"></a>
-  <a href="https://github.com/grecdel/Interprete/actions/workflows/build-android.yml"><img src="https://github.com/grecdel/Interprete/actions/workflows/build-android.yml/badge.svg" alt="Compilation et tests Android"></a>
+  <a href="https://github.com/grecdel/Interprete/releases/tag/v0.4.0">Android 0.4</a> ·
+  <a href="https://github.com/grecdel/Interprete/releases/tag/v0.2.0">Linux 0.2</a> ·
+  <a href="docs/ANDROID.md">Guide Android</a> ·
+  <a href="docs/VERSION-0.4.md">Fonctions et limites de la version 0.4</a>
 </p>
 
-![Interprete : aperçu de l’application Linux native, avec données fictives de présentation](docs/assets/hero.png)
+> **Prototype expérimental.** Les transcriptions, citations, conclusions et connexions doivent être relues et recoupées avant une utilisation journalistique. Les captures utilisent des données fictives.
 
-> **Prototype expérimental.** Interprete propose des éléments à vérifier, pas une vérité garantie. Les conclusions, citations et connexions doivent être contrôlées avant une relance factuelle à l’antenne. Les captures ci-dessus et ci-dessous utilisent des **données fictives de démonstration**.
+## Android : une application autonome
 
-## Sur Android aussi
+Téléchargez [**Interprete-0.4.0-android.apk**](https://github.com/grecdel/Interprete/releases/download/v0.4.0/Interprete-0.4.0-android.apk), ouvrez le fichier sur Android 8.0 ou ultérieur avec Android System WebView à jour, puis renseignez votre clé API OpenAI dans les réglages. Aucun serveur Linux ni environnement Codex à lancer.
 
-Téléchargez [**Interprete-0.4.0-android.apk**](https://github.com/grecdel/Interprete/releases/download/v0.4.0/Interprete-0.4.0-android.apk) et ouvrez le fichier sur votre téléphone (**Android 8.0 ou ultérieur**, Android System WebView à jour). Cette version autonome utilise le micro et une bulle optionnelle, avec les autorisations Android et une notification visible pendant l’écoute. La clé se saisit dans l’application ; aucun serveur Linux n’est nécessaire.
+- Micro Android et bulle flottante optionnelle avec autorisations explicites.
+- Thèmes pastel, sombre, Matrix et enquête ; boule organique animée.
+- Dossier local de pièces : recherche, annotations, provenance, empreintes, dédoublonnage et export/réimport.
+- Lecture/extraction PDF et OCR français/anglais des images, avec moteurs et modèles embarqués.
+- Connecteurs directs **Crossref**, **data.gouv.fr** et **Annuaire des entreprises** ; notices datées et conservables.
+- Glossaire local de jargon, calculateur de variation et comparaison textuelle de citations.
+- Conservation audio Android optionnelle sur disque, plafonds de 30/60/180 minutes et mode hors ligne sans transcription.
+- Export ZIP du compte rendu, du JSON et des WAV ; audio rattaché aux propos et accessible depuis la carte.
 
-→ [Guide Android : installation, permissions, bulle et archives](docs/ANDROID.md)
+Les appels OpenAI nécessitent Internet et peuvent être facturés sur votre compte API ; un abonnement ChatGPT ne fournit pas ce crédit. La clé n’est pas incluse dans l’APK. Sa mémorisation utilise Android Keystore. Les trois connecteurs publics et le traitement local des documents ne nécessitent pas cette clé.
 
-<p align="center"><img src="docs/assets/android.png" width="300" alt="Interprete dans un émulateur Android, pendant la préparation d’un compte rendu avec des données simulées"></p>
+## Un tableau pour suivre les connexions
 
-<p align="center"><em>Aperçu Android pendant la préparation d’un compte rendu — données de test simulées.</em></p>
+Le thème enquête apporte liège, dossiers, photos façon Polaroïd, punaises et fils rouges. La recherche filtre les éléments ; la vue d’ensemble et le zoom permettent de parcourir le tableau. L’ambiance jazzy locale démarre uniquement au clic.
 
-## Une application à ouvrir, simplement
+![Tableau enquête avec données fictives et pièces importées](docs/assets/investigation-board.png)
 
-Téléchargez **`Interprete-0.2.0-linux-x86_64.AppImage`** dans les [versions publiées](https://github.com/grecdel/Interprete/releases). Autorisez son exécution dans les propriétés du fichier, puis double-cliquez dessus.
+Les étiquettes distinguent les relations : une association ne constitue pas une preuve. Les imports directs dans la carte sont temporaires ; utilisez le dossier d’enquête pour conserver les pièces.
 
-Ou, dans le dossier du téléchargement :
+## Documents et audio : connaître les limites
+
+Les pièces sont conservées localement, sans envoi automatique aux services de recherche. Limites : 8 Mio par pièce, 64 Mio pour le dossier ; extraction PDF jusqu’à 50 pages et 200 000 caractères. L’OCR d’images doit être relu ; les PDF scannés sans texte nécessitent encore une conversion des pages en images.
+
+L’audio Android est limité à 512 Mio au total. Les durées configurées sont des plafonds, pas une garantie de fonctionnement sur tous les téléphones. Le micro écoute l’entrée choisie par Android ; l’audio interne des applications et les appels ne sont pas capturés directement. L’association audio/transcription porte sur les segments, sans alignement au mot ni identification automatique des interlocuteurs.
+
+Les notices OSINT sont des pistes documentaires : elles ne certifient pas les affirmations. Les autres services du [catalogue OSINT](docs/OSINT.md) ne sont pas tous connectés.
+
+## Linux
+
+La [version Linux publiée 0.2](https://github.com/grecdel/Interprete/releases/tag/v0.2.0) fournit une AppImage et une archive portable autonomes. Elle précède les nouveautés Android 0.4. Python, le serveur et l’interface de cette version sont embarqués.
 
 ```sh
 chmod +x Interprete-0.2.0-linux-x86_64.AppImage
 ./Interprete-0.2.0-linux-x86_64.AppImage
 ```
 
-**Python, le serveur et l’interface sont embarqués.** Vous n’avez pas à lancer un terminal, déployer un site ou configurer un environnement Codex pour l’utiliser. Une archive portable `.tar.gz` est également fournie si AppImage/FUSE n’est pas disponible.
+![Application Linux — données fictives de présentation](docs/assets/hero.png)
 
-| Pendant l’interview | Après l’interview |
-| --- | --- |
-| Une bulle au premier plan et un volet compact. | La transcription complète horodatée. |
-| Un micro, une phrase, un article ou un lien. | Les propos exacts rapprochés des analyses. |
-| Des pistes de relance avec contexte et sources. | Un compte rendu HTML et une archive JSON. |
-| Des rapprochements avec les propos antérieurs. | Une carte des connexions à explorer hors ligne. |
+## Développement et validation
 
-## Votre clé, dans l’application
+[Mode web](docs/DEVELOPMENT.md) · [Application de bureau](docs/DESKTOP.md) · [Android](docs/ANDROID.md) · [Détails 0.4 et licences](docs/VERSION-0.4.md).
 
-Au premier lancement, saisissez votre **clé API OpenAI** dans les réglages d’Interprete. La clé reste en mémoire ; sa mémorisation est proposée uniquement lorsqu’un coffre système sécurisé est disponible. Elle n’est jamais incluse dans le programme distribué.
-
-<p align="center"><img src="docs/assets/settings.png" width="340" alt="Réglages de l’application : saisie de la clé API et mémorisation optionnelle dans le coffre système"></p>
-
-La transcription audio et les recherches utilisent votre compte API OpenAI et peuvent être facturées. Un abonnement ChatGPT ne fournit pas ce crédit API. [Créer une clé](https://platform.openai.com/api-keys).
-
-## Relire les connexions
-
-Le compte rendu relie les extraits d’origine aux affirmations, aux sources citées et aux propos antérieurs. Sélectionnez un nœud, affichez les incohérences potentielles et retrouvez les passages concernés.
-
-![Carte des connexions d’un compte rendu Interprete — exemple fictif](docs/assets/mind-map.png)
-
-La carte reste consultable sans connexion. Seule l’ouverture des documents sources nécessite Internet. Importez une archive JSON passée pour fournir du contexte à une prochaine interview.
-
-## Ce que cette version garantit — et ses limites
-
-- Sur Linux, le serveur fonctionne **sur votre ordinateur**, avec une API locale réservée à l’application de bureau. Sur Android, les appels API partent directement de l’application, sans serveur à installer.
-- L’audio est envoyé à OpenAI par extraits de 12 secondes, sur autorisation du micro. Aucun fichier audio n’est conservé. Il faut une connexion Internet.
-- Les recherches prennent plusieurs secondes. Ce prototype ne garantit pas une réponse instantanée ni une latence adaptée à chaque direct.
-- Une conclusion sans source associée est ramenée à **« Informations insuffisantes »**. Cela ne certifie pas les conclusions qui ont des sources.
-- Les citations proposées ne sont pas automatiquement comparées mot à mot aux documents originaux. **Le recoupement journalistique reste indispensable.**
-- Les connexions avec des propos passés sont des pistes : les dates, les périmètres et les interlocuteurs peuvent différer. La transcription n’identifie pas automatiquement les personnes.
-
-Consultez le [guide de l’application Linux](docs/DESKTOP.md) pour les permissions du micro, X11/XWayland, les fichiers exportés et les données transmises.
-
-## Construire et tester
-
-```sh
-python3 -m venv .build-venv
-.build-venv/bin/pip install -r requirements-build.txt
-npm ci
-npx --no install-electron
-.build-venv/bin/python scripts/build_backend.py
-npm run dist:linux
-```
-
-La [compilation GitHub Actions](.github/workflows/build-linux.yml) produit l’AppImage, l’archive portable et leurs empreintes SHA-256. Elle vérifie aussi l’application empaquetée. Le code reste utilisable en [mode web de développement](docs/DEVELOPMENT.md).
-
-Les tests simulent les réponses de recherche et l’audio. Ils valident le fonctionnement logiciel, **pas l’exactitude journalistique** d’une interview réelle.
-
-
-## Dossier d’enquête et atelier OSINT — évolution du code
-
-Le bouton **Dossier d’enquête** ouvre une bibliothèque locale de pièces : import, recherche dans les textes simples, annotations, provenance, empreintes SHA-256 et association aux affirmations. Chaque pièce peut être exportée avec son original dans un conteneur JSON réimportable. Le compte rendu conserve aussi l’inventaire et les annotations. Aucun fichier n’est envoyé automatiquement aux services de recherche.
-
-Le [catalogue d’intégrations OSINT](docs/OSINT.md) détaille les outils proposés, leurs accès et les étapes d’intégration. Cette évolution du code n’est pas encore incorporée à l’APK v0.3.0 publié ; les connecteurs API, l’OCR, l’audio long et la fresque sont encore à développer.
-
-## Tableau d’enquête — évolution du code
-
-Le compte rendu propose désormais une ambiance **Enquête** : liège, dossiers, photos façon Polaroïd, fils rouges, recherche, import de pièces et vue d’ensemble. Une ambiance jazzy locale s’active au clic. Les pièces ajoutées directement à la carte sont temporaires ; utilisez le dossier d’enquête pour les conserver.
-
-![Tableau enquête avec données fictives, imports et connexions](docs/assets/investigation-board.png)
-
-Ce changement de code n’est pas encore inclus dans l’APK publié. [Fonctionnement et état des évolutions](docs/EVOLUTION.md).
-
-
-## Version Android 0.4
-
-Les [fonctions et limites de la version 0.4](docs/VERSION-0.4.md) décrivent les trois connecteurs documentaires, le PDF/OCR local et la conservation audio Android avec export ZIP. Le catalogue OSINT complet reste une feuille de route : tous les services proposés ne sont pas encore connectés.
+Les tests automatisés vérifient les parcours logiciels avec des interviews et des réponses OpenAI simulées. Le PDF/OCR est testé avec des documents fictifs. Les tests ne certifient pas l’exactitude journalistique et ne remplacent pas un essai sur appareil réel avant un direct.

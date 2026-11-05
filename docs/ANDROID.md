@@ -4,7 +4,7 @@ L’APK cible **Android 8.0 ou ultérieur**, avec Android System WebView à jour
 
 ## Installer
 
-Téléchargez [Interprete-0.3.0-android.apk](https://github.com/grecdel/Interprete/releases/download/v0.3.0/Interprete-0.3.0-android.apk), puis ouvrez-le sur votre téléphone. Android peut demander d’autoriser l’installation depuis le navigateur ou le gestionnaire de fichiers utilisé. Il s’agit d’une installation manuelle, pas d’une application publiée sur Google Play.
+Téléchargez [Interprete-0.4.0-android.apk](https://github.com/grecdel/Interprete/releases/download/v0.4.0/Interprete-0.4.0-android.apk), puis ouvrez-le sur votre téléphone. Android peut demander d’autoriser l’installation depuis le navigateur ou le gestionnaire de fichiers utilisé. Il s’agit d’une installation manuelle, pas d’une application publiée sur Google Play.
 
 L’APK est signé avec l’identité privée du projet. Son certificat public se trouve dans `android/signing-certificate.der` ; les empreintes du téléchargement accompagnent la version publiée. Une mise à jour doit conserver la même signature pour préserver l’installation et ses données.
 
@@ -27,7 +27,7 @@ Dans les réglages, **Activer la bulle au-dessus des applications** ouvre une au
 
 Le micro capte le son autour du téléphone ou l’entrée audio choisie par Android. **L’audio interne d’une autre application et les appels ne sont pas capturés directement.** Utilisez des haut-parleurs ou une entrée adaptée. Les restrictions de batterie du constructeur peuvent affecter le fonctionnement en arrière-plan.
 
-L’audio est envoyé à OpenAI par extraits d’environ 12 secondes. Les buffers sont temporaires en mémoire, sans fichier audio conservé par Interprete. La transcription reste automatique et peut être erronée. Une file d’attente limitée met l’écoute en pause en cas de retard important ; les erreurs sont affichées.
+L’audio est envoyé à OpenAI par extraits d’environ 12 secondes. Si la conservation audio est activée, les segments WAV sont enregistrés dans l’espace privé de l’application (512 Mio au total). Le mode hors ligne enregistre sans transcription. Les durées maximales sont de 30, 60 ou 180 minutes, sous réserve de stockage et de fonctionnement du système. La transcription reste automatique et peut être erronée. Une file d’attente limitée met l’écoute en pause en cas de retard important ; les erreurs sont affichées.
 
 ## Vérifications et archives
 
@@ -52,6 +52,13 @@ Le wrapper et la distribution Gradle sont vérifiés contre leurs empreintes off
 
 Le workflow `build-android.yml` compile les APK, exécute les tests et prépare une version destinée aux essais dans l’émulateur. Les réponses OpenAI et la source audio des essais sont simulées : ces tests ne certifient pas la fidélité d’un micro réel ni l’exactitude journalistique.
 
-Pour la version 0.3.0, les sept tests unitaires et le contrôle Android passent. Le [parcours dans l’émulateur Android 35](https://github.com/grecdel/Interprete/actions/runs/41964216914) vérifie la saisie et le chiffrement de la clé, une vérification simulée, l’écoute, la conservation de la dernière phrase après un arrêt depuis la notification et l’écriture d’un compte rendu HTML contenant la transcription et la carte.
+Pour la version 0.3.0 historique, les sept tests unitaires et le contrôle Android passent. Le [parcours dans l’émulateur Android 35](https://github.com/grecdel/Interprete/actions/runs/41964216914) vérifie la saisie et le chiffrement de la clé, une vérification simulée, l’écoute, la conservation de la dernière phrase après un arrêt depuis la notification et l’écriture d’un compte rendu HTML contenant la transcription et la carte.
 
 La signature de distribution se fait hors CI avec `scripts/sign_android.py`. Les fichiers privés restent dans `.android-signing/`, ignorés par Git et non incorporés dans l’APK. **Conservez une sauvegarde privée et sûre de ce dossier pour les futures mises à jour** : recréer une identité différente ne permet pas de mettre à jour les installations existantes. Ne publiez jamais ce dossier, son mot de passe ou le magasin de clés.
+
+
+## Ajouts de la version 0.4
+
+Le dossier d’enquête permet la lecture/extraction PDF, l’OCR local français/anglais des images et les recherches directes Crossref, data.gouv.fr et Annuaire des entreprises. Le tableau du compte rendu dispose du thème enquête, d’une barre de recherche, de photos et d’imports temporaires.
+
+Le bouton **Terminer et exporter le dossier avec audio (ZIP)** conserve le compte rendu, ses données et les segments audio relatifs. Les réglages permettent de récupérer les audios et transcriptions conservés, ou de supprimer les audios après export. [Fonctions et limites détaillées](VERSION-0.4.md).
