@@ -24,6 +24,10 @@ Téléchargez [**Interprete-0.3.0-android.apk**](https://github.com/grecdel/Inte
 
 → [Guide Android : installation, permissions, bulle et archives](docs/ANDROID.md)
 
+<p align="center"><img src="docs/assets/android.png" width="300" alt="Interprete dans un émulateur Android, pendant la préparation d’un compte rendu avec des données simulées"></p>
+
+<p align="center"><em>Aperçu Android pendant la préparation d’un compte rendu — données de test simulées.</em></p>
+
 ## Une application à ouvrir, simplement
 
 Téléchargez **`Interprete-0.2.0-linux-x86_64.AppImage`** dans les [versions publiées](https://github.com/grecdel/Interprete/releases). Autorisez son exécution dans les propriétés du fichier, puis double-cliquez dessus.

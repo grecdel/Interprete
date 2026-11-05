@@ -52,4 +52,6 @@ Le wrapper et la distribution Gradle sont vérifiés contre leurs empreintes off
 
 Le workflow `build-android.yml` compile les APK, exécute les tests et prépare une version destinée aux essais dans l’émulateur. Les réponses OpenAI et la source audio des essais sont simulées : ces tests ne certifient pas la fidélité d’un micro réel ni l’exactitude journalistique.
 
+Pour la version 0.3.0, les sept tests unitaires et le contrôle Android passent. Le [parcours dans l’émulateur Android 35](https://github.com/grecdel/Interprete/actions/runs/41964216914) vérifie la saisie et le chiffrement de la clé, une vérification simulée, l’écoute, la conservation de la dernière phrase après un arrêt depuis la notification et l’écriture d’un compte rendu HTML contenant la transcription et la carte.
+
 La signature de distribution se fait hors CI avec `scripts/sign_android.py`. Les fichiers privés restent dans `.android-signing/`, ignorés par Git et non incorporés dans l’APK. **Conservez une sauvegarde privée et sûre de ce dossier pour les futures mises à jour** : recréer une identité différente ne permet pas de mettre à jour les installations existantes. Ne publiez jamais ce dossier, son mot de passe ou le magasin de clés.
