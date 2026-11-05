@@ -97,7 +97,9 @@ jobs:
             adb install -r android-output/app-debug.apk
             adb install -r android-output/app-debug-androidTest.apk
             adb shell am instrument -w -r fr.interprete.assistant.test/androidx.test.runner.AndroidJUnitRunner | tee android-instrumentation.txt
-            rg -F -q 'OK (1 test)' android-instrumentation.txt
+            adb logcat -d -s AndroidRuntime:E chromium:E > android-logcat.txt
+            adb pull /sdcard/Android/data/fr.interprete.assistant/files/android-failure.png android-failure.png || true
+            python3 -c "from pathlib import Path; assert 'OK (1 test)' in Path('android-instrumentation.txt').read_text()"
             adb pull /sdcard/Android/data/fr.interprete.assistant/files/android-demo.png android-demo.png
       - uses: actions/upload-artifact@v4
         if: always()
@@ -105,5 +107,7 @@ jobs:
           name: Android-emulator-results
           path: |
             android-instrumentation.txt
+            android-logcat.txt
+            android-failure.png
             android-demo.png
           if-no-files-found: ignore

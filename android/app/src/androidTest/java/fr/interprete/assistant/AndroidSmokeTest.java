@@ -32,7 +32,10 @@ public class AndroidSmokeTest {
     private void until(ActivityScenario<MainActivity> scenario, String condition) throws Exception {
         long end = SystemClock.elapsedRealtime() + 20000;
         while (SystemClock.elapsedRealtime() < end) { if ("true".equals(js(scenario, condition))) return; SystemClock.sleep(200); }
-        fail("Condition non satisfaite : " + condition);
+        String state = js(scenario, "JSON.stringify({status:document.getElementById('status').textContent,error:document.getElementById('error-text').textContent,archive:document.getElementById('archive-status').textContent,exportDisabled:document.getElementById('export-html').disabled})");
+        android.content.Context context = InstrumentationRegistry.getInstrumentation().getTargetContext();
+        InstrumentationRegistry.getInstrumentation().getUiAutomation().takeScreenshot().compress(android.graphics.Bitmap.CompressFormat.PNG, 100, new java.io.FileOutputStream(new java.io.File(context.getExternalFilesDir(null), "android-failure.png")));
+        fail("Condition non satisfaite : " + condition + " ; état : " + state);
     }
     @Test public void keyEntryVerificationAndNativeRecordingWorkWithoutRealApiCalls() throws Exception {
         InterpreteApp app = (InterpreteApp) InstrumentationRegistry.getInstrumentation().getTargetContext().getApplicationContext();
@@ -86,8 +89,10 @@ public class AndroidSmokeTest {
                 new android.app.Instrumentation.ActivityResult(android.app.Activity.RESULT_OK,
                     new Intent().setData(android.net.Uri.fromFile(archive))), true);
             try {
+                until(scenario, "!document.getElementById('export-html').disabled");
                 js(scenario, "document.getElementById('archive-button').click();document.getElementById('export-html').click();true");
-                until(scenario, "!document.getElementById('android-archive-preview').hidden");
+                try { until(scenario, "!document.getElementById('android-archive-preview').hidden"); }
+                catch (AssertionError error) { throw new AssertionError(error.getMessage() + " ; sélecteur appelé : " + picker.getHits() + " ; fichier présent : " + archive.exists() + " ; HTML en mémoire : " + app.lastArchive.length()); }
                 assertEquals(1, picker.getHits());
                 String html = new String(java.nio.file.Files.readAllBytes(archive.toPath()), java.nio.charset.StandardCharsets.UTF_8);
                 assertTrue(html.contains("dernière phrase enregistrée"));
