@@ -100,7 +100,8 @@ jobs:
             adb logcat -c
             timeout 900 adb shell am instrument -w -r fr.interprete.assistant.test/androidx.test.runner.AndroidJUnitRunner | tee android-instrumentation.txt || true
             adb logcat -d -s AndroidRuntime:E chromium:I InterpreteTest:I > android-logcat.txt || true
-            grep -E "InterpreteTest|AndroidRuntime|chromium" android-logcat.txt | tail -120 || true
+            grep -E "InterpreteTest|AndroidRuntime|chromium" android-logcat.txt | grep -v "js: " | tail -60 || true
+            adb logcat -d '*:W' | grep -iE "renderer|sandboxed_process|lowmemory|lmkd|killing|tombstone|DEBUG|libc|signal|fatal|abort|gpu|webgl|egl|gles" | tail -80 || true
             adb pull /sdcard/Android/data/fr.interprete.assistant/files/android-failure.png android-failure.png || true
             python3 -c "from pathlib import Path; assert 'OK (1 test)' in Path('android-instrumentation.txt').read_text()"
             adb pull /sdcard/Android/data/fr.interprete.assistant/files/android-demo.png android-demo.png
