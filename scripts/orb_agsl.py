@@ -19,14 +19,15 @@ def glsl_source(path=ROOT / 'static' / 'orb.js'):
 
 def to_agsl(glsl):
     code = re.sub(r'^precision [^;]+;\s*', '', glsl.strip())
+    code = re.sub(r'gl_FragColor=vec4\((\w+),(\w+)\);', r'return half4(half3(\1),half(\2));', code)
     code = re.sub(r'\bvec2\b', 'float2', code)
+    code = re.sub(r'\bvec4\b', 'float4', code)
     code = re.sub(r'\bvec3\b', 'float3', code)
     code = re.sub(r'\bmat2\b', 'float2x2', code)
     # AGSL's origin is the top-left corner: flip y so the light comes from the same side.
     code = code.replace('void main(){', 'half4 main(float2 fragCoord){', 1)
     code = code.replace('gl_FragCoord.xy', 'float2(fragCoord.x,uRes.y-fragCoord.y)')
-    code = re.sub(r'gl_FragColor=vec4\((\w+),(\w+)\);', r'return half4(half3(\1),half(\2));', code)
-    leftovers = re.findall(r'\b(?:vec4|gl_\w+|precision)\b', code)
+    leftovers = re.findall(r'\b(?:vec[234]|gl_\w+|precision)\b', code)
     if leftovers or 'half4 main(' not in code or 'return half4(' not in code:
         raise RuntimeError('Conversion AGSL incomplète : ' + ', '.join(sorted(set(leftovers))))
     return code + '\n'

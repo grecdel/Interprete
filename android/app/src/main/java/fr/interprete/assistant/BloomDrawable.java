@@ -40,7 +40,7 @@ final class BloomDrawable extends Drawable {
     private final long origin = SystemClock.uptimeMillis();
     private final float seed = (float) (Math.random() * 50);
     private ValueAnimator animator;
-    private float phase = .25f, amp, energy;
+    private float phase = .25f, amp, energy, listen;
     private long lastFrame, lastInvalidate;
 
     BloomDrawable(Context context, String theme, State state) {
@@ -99,9 +99,10 @@ final class BloomDrawable extends Drawable {
         boolean still = !ValueAnimator.areAnimatorsEnabled();
         amp += (targetAmp - amp) * (still ? 1 : 1 - (float) Math.exp(-delta * (targetAmp > amp ? 14 : 5)));
         energy += (targetEnergy - energy) * (still ? 1 : 1 - (float) Math.exp(-delta * 2.5));
+        listen += ((listening ? 1f : 0f) - listen) * (still ? 1 : 1 - (float) Math.exp(-delta * 2.5));
         shader.setFloatUniform("uRes", bounds.width(), bounds.height());
         shader.setFloatUniform("uTime", still ? 14f : (now - origin) / 1000f);
-        shader.setFloatUniform("uAmp", amp); shader.setFloatUniform("uEnergy", energy); shader.setFloatUniform("uAlert", 0f);
+        shader.setFloatUniform("uAmp", amp); shader.setFloatUniform("uEnergy", energy); shader.setFloatUniform("uAlert", 0f); shader.setFloatUniform("uListen", listen);
         shader.setFloatUniform("uSeed", seed); shader.setFloatUniform("uLife", LIFE); shader.setIntUniform("uMat", materialId);
         shader.setFloatUniform("uLight", channels(colors[0])); shader.setFloatUniform("uMid", channels(colors[1]));
         shader.setFloatUniform("uHot", channels(colors[2])); shader.setFloatUniform("uBase", channels(base));

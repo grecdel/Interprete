@@ -1,8 +1,9 @@
 'use strict';
 // Living bubble: one WebGL canvas and one draw call replace the CSS ribbons and particles.
-// A ball is the centre of gravity and the material moves around it following its own physics:
-// pastel = water drop and ballistic droplets, dark = plasma ball, matrix = glyph accretion,
-// investigation = smoke atmosphere in differential rotation, fire = burning ball and rising flames and the shape follows the assistant's state and the real voice level.
+// A ball at the centre and the material in orbit around it: water streams, a plasma ball with
+// bolts leaping out, glyph rings, smoke wisps, flame ribbons and embers. Each state has its own
+// motion: slow at rest, voice-driven while listening, a fast vortex and a scanning ring during
+// analysis, a heartbeat and a shock wave when a follow-up is ready. and the shape follows the assistant's state and the real voice level.
 // Without WebGL, or once the context is lost for good, the CSS bubble stays in place.
 (() => {
   const companion = document.getElementById('companion'), bubble = document.getElementById('bubble');
@@ -20,162 +21,213 @@
   const VERTEX = 'attribute vec2 a;void main(){gl_Position=vec4(a,0.,1.);}';
   // Shared with Android: scripts/orb_agsl.py turns this GLSL into AGSL for the native overlay bubble.
   const FRAGMENT = `precision highp float;
-uniform vec2 uRes;uniform float uTime,uAmp,uEnergy,uAlert,uSeed,uLife;uniform int uMat;
+uniform vec2 uRes;uniform float uTime,uAmp,uEnergy,uAlert,uListen,uSeed,uLife;uniform int uMat;
 uniform vec3 uLight,uMid,uHot,uBase;
 float hash3(vec3 p){p=fract(p*.3183099+.1);p*=17.;return fract(p.x*p.y*p.z*(p.x+p.y+p.z));}
 float vnoise(vec3 x){vec3 i=floor(x),f=fract(x);f=f*f*(3.-2.*f);
 return mix(mix(mix(hash3(i),hash3(i+vec3(1.,0.,0.)),f.x),mix(hash3(i+vec3(0.,1.,0.)),hash3(i+vec3(1.,1.,0.)),f.x),f.y),
 mix(mix(hash3(i+vec3(0.,0.,1.)),hash3(i+vec3(1.,0.,1.)),f.x),mix(hash3(i+vec3(0.,1.,1.)),hash3(i+vec3(1.,1.,1.)),f.x),f.y),f.z);}
 float fbm(vec3 p){float s=0.,a=.5;for(int i=0;i<4;i++){s+=a*vnoise(p);p=p*2.03+vec3(1.7,9.2,3.1);a*=.5;}return s;}
+mat2 rot2(float a){float c=cos(a),s=sin(a);return mat2(c,-s,s,c);}
+// An orbit seen at an angle: an ellipse of radius a, flattened by squash, rotated by tilt.
+// x: coverage, y: position along the stream (0 head, 1 tail), z: 1 in front of the ball, w: across (-1..1).
+vec4 orbit(vec2 uv,float a,float squash,float tilt,float head,float arc,float width,float px){
+ vec2 p=rot2(-tilt)*uv;
+ vec2 c=vec2(p.x,p.y/squash);
+ float th=atan(c.y,c.x);
+ float along=mod(head-th,6.2832)/max(arc,.01);
+ float scale=mix(1.,squash,abs(sin(th)));
+ float d=(length(c)-a)*scale;
+ float w=width*(1.-smoothstep(.15,1.,along));
+ float cover=smoothstep(w+px,w-px,abs(d))*step(along,1.);
+ return vec4(cover,along,1.-step(0.,c.y),d/max(w,1e-3));
+}
 void main(){
  float px=2./min(uRes.x,uRes.y);
  vec2 uv=(gl_FragCoord.xy-.5*uRes)*px;
  float t=uTime*(.55+.6*uLife)+uSeed;
  float r=length(uv);vec2 dir=uv/max(r,1e-4);
- float breath=.012*sin(t*.8);
- vec3 col=vec3(0.);float alpha=0.;
  float ang=atan(uv.y,uv.x);
+ // State rhythm: rest is slow, listening follows the voice, analysis spins, a follow-up beats.
+ float pace=.45+.4*uListen+2.4*uEnergy+.6*uAmp;
+ float beat=fract(uTime*.85);
+ float thump=exp(-beat*7.)*uAlert;
+ float R=(.33+.012*sin(t*.8)+uAmp*.025)*(1.+.08*thump);
+ vec2 q=uv/R;float z=sqrt(max(0.,1.-dot(q,q)));
+ float ball=smoothstep(R+px,R-px,r);
  vec3 L=normalize(vec3(-.45,.6,.65));
- if(uMat==0){
-  // Water: a drop held by surface tension. Its outline oscillates in low modes; droplets are thrown
-  // from the surface and fall back under the ball's gravity (ballistic arcs), merging on impact.
-  float R=.4+breath+uAmp*.03;
-  float wob=.028*sin(3.*ang+t*1.7)+.022*sin(5.*ang-t*2.3)+.012*sin(8.*ang+t*3.1)+.025*(vnoise(vec3(dir*3.,t))-.5)+uAmp*.035*sin(7.*ang+t*7.);
-  float field=R+wob-r;
-  float drops=-1.;
-  for(int i=0;i<8;i++){
-   float fi=float(i);
-   float cycle=t*(.35+.12*hash3(vec3(fi,3.,1.)))*(1.+.8*uEnergy+.6*uAmp)+hash3(vec3(fi,1.,9.));
-   float ph=fract(cycle),round_=floor(cycle);
-   float a=6.2832*hash3(vec3(fi,round_,4.));
-   vec2 d0=vec2(cos(a),sin(a));
-   float hmax=.12+.12*hash3(vec3(fi,round_,7.))+uAmp*.12;
-   float h=4.*hmax*ph*(1.-ph);
-   float rad=.022+.018*hash3(vec3(fi,2.,2.));
-   vec2 c0=d0*(R+h+rad*.5)+vec2(-d0.y,d0.x)*.08*(ph-.5);
-   float drop=rad-length(uv-c0);
-   drops=max(drops,drop);
-   float k=28.;field=log(exp(k*field)+exp(k*drop))/k;
-  }
-  float inside=smoothstep(-px*1.2,px*1.2,field);
-  vec2 q=uv/R;float z=sqrt(max(0.,1.-dot(q,q)));vec3 n=normalize(vec3(q,z+.001));
-  float dif=dot(n,L);
-  vec3 c=mix(uMid,uLight,step(.25,dif));
-  c=mix(c,uBase*1.2,step(dif,-.25)*.7);
-  float s=fbm(vec3(q*2.2,t*.5));
-  c=mix(c,mix(uLight,vec3(1.),.6),smoothstep(.02,.0,abs(s-.55))*step(.1,z));
-  c=mix(c,vec3(1.),smoothstep(.93,.97,dot(reflect(-L,n),vec3(0.,0.,1.))));
-  c=mix(c,mix(uLight,vec3(1.),.4),smoothstep(.035,.0,field)*.8);
-  c=mix(c,uLight,step(R*1.02,r)*.6);
-  col=c*inside;alpha=inside;
- }else if(uMat==1){
-  // Electricity: a plasma ball. Arcs crawl across a dark core, the rim crackles,
-  // and from time to time a discharge escapes outward.
-  float R=.52+breath+uAmp*.04;
-  float inside=smoothstep(R+.03,R-.1,r);
+ vec3 ballC=vec3(0.);float ballA=0.;
+ vec3 backC=vec3(0.);float backA=0.;
+ vec3 frontC=vec3(0.);float frontA=0.;
+ vec3 glowC=vec3(0.);
+ if(uMat==1){
+  // Electricity: the plasma ball, and bolts that leap out of it at random.
+  float RE=R*1.45;
+  float inside=smoothstep(RE+.03,RE-.1,r);
   float haze=fbm(vec3(uv*2.4,t*.3));
-  col+=mix(uBase*2.,uMid*.28,haze)*inside*(.3+.7*smoothstep(0.,R,r));
-  alpha+=inside*.75;
-  float bolts=0.,escape=0.;
+  ballC=mix(uBase*2.,uMid*.28,haze)*inside*(.3+.7*smoothstep(0.,RE,r));ballA=inside*.75;
+  float bolts=0.;
   for(int i=0;i<3;i++){
    float fi=float(i);
-   vec3 p=vec3(uv*(1.5+fi*.8),t*(.9+fi*.35)+fi*7.);
+   vec3 p=vec3(uv*(1.5+fi*.8),t*(.9+fi*.35)*(.7+.6*pace)+fi*7.);
    float f=fbm(p+fbm(p*1.7)*.9)+(vnoise(p*9.)-.5)*.07;
-   float w=.005+.005*uEnergy+.003*uAmp;
+   float w=.005+.004*uEnergy+.003*uAmp;
    float dist=abs(f-.5);
-   float line=(smoothstep(w*1.6,0.,dist)*1.4+w*.6/(dist+w))*(.8-fi*.2);
-   bolts+=line;escape+=line;
+   bolts+=(smoothstep(w*1.6,0.,dist)*1.4+w*.6/(dist+w))*(.8-fi*.2);
   }
   bolts*=inside*smoothstep(.0,.3,r);
-  float gate=smoothstep(.62-.2*uEnergy-.15*uAmp,.8,vnoise(vec3(dir*2.5,t*1.6)));
-  escape*=gate*smoothstep(R-.02,R+.02,r)*exp(-max(r-R,0.)*9.);
+  // Bolts out of the ball: each flashes briefly along a jagged, branching path.
+  float leap=0.;
+  for(int i=0;i<6;i++){
+   float fi=float(i);
+   float cyc=uTime*(.9+.4*hash3(vec3(fi,1.,1.)))*(1.+1.6*uEnergy+2.*uAmp)+hash3(vec3(fi,7.,3.));
+   float id=floor(cyc),life=fract(cyc);
+   float chance=.32+.7*uListen*uAmp+.4*uEnergy+.5*uAlert*step(beat,.2);
+   float on=step(hash3(vec3(fi,id,5.)),chance);
+   float flash=on*smoothstep(0.,.04,life)*smoothstep(.4,.12,life)*(.7+.3*vnoise(vec3(uTime*30.,fi,id)));
+   float a=6.2832*hash3(vec3(fi,id,2.))+uEnergy*t*.8;
+   vec2 db=vec2(cos(a),sin(a));
+   float len=.22+.28*hash3(vec3(fi,id,9.))+.15*uAmp;
+   float s=dot(uv,db)-RE*.92;
+   float perp=dot(uv,vec2(-db.y,db.x));
+   float sn=clamp(s/len,0.,1.);
+   float off=(fbm(vec3(s*7.,id+fi*3.,1.))-.5)*.24*(sn+.15)+(vnoise(vec3(s*34.,id,fi))-.5)*.025;
+   float w=.0045*(1.-sn*.6);
+   float span=step(0.,s)*smoothstep(len,len*.75,s);
+   float d1=abs(perp-off);
+   float side=hash3(vec3(fi,id,4.))>.5?1.:-1.;
+   float bs=max(s-len*.4,0.);
+   float off2=off+side*bs*.9+(vnoise(vec3(s*28.,id,fi+4.))-.5)*.03;
+   float d2=abs(perp-off2);
+   float branch=step(len*.4,s)*smoothstep(len*.9,len*.6,s);
+   leap+=flash*span*(smoothstep(w*2.,0.,d1)*1.5+w*.9/(d1+w)+branch*(smoothstep(w*1.6,0.,d2)+w*.5/(d2+w)));
+  }
   float jitter=(vnoise(vec3(dir*5.,t*4.))-.5)*.08*(1.+uEnergy+uAmp)+(vnoise(vec3(dir*17.,t*7.))-.5)*.025;
-  float rim=.005/(abs(r-R-jitter)+.005);
+  float rim=.005/(abs(r-RE-jitter)+.005);
+  float rimCore=smoothstep(.012,.0,abs(r-RE-jitter));
+  // Analysis: a bright arc runs round the rim like a scanner.
+  float scan=uEnergy*smoothstep(.75,1.,cos(ang-uTime*5.))*1.6;
   float flick=.65+.35*vnoise(vec3(uTime*19.,uSeed,1.));
   vec3 white=mix(uHot,vec3(1.),.65);
-  float rimCore=smoothstep(.012,.0,abs(r-R-jitter));
-  bolts+=escape;
-  col+=(uLight*min(bolts,2.)*.55+white*smoothstep(.8,1.6,bolts)*.9+uLight*rim*.35+white*rimCore*.9)*flick;
-  col+=uMid*exp(-max(r-R,0.)*10.)*.35*(.6+uEnergy+uAmp)*smoothstep(R-.12,R,r);
-  alpha=max(alpha,clamp(max(col.r,max(col.g,col.b)),0.,1.));
- }else if(uMat==2){
-  // Data: a core covered in glyphs; streams of signs spiral in, pulled by the core (accretion).
-  float R=.36+breath;
-  float inside=smoothstep(R+px,R-px,r);
-  vec2 q=uv/R;float z=sqrt(max(0.,1.-dot(q,q)));
-  float sp=t*.2;vec2 pxz=mat2(cos(sp),-sin(sp),sin(sp),cos(sp))*vec2(q.x,z);vec3 p=vec3(pxz.x,q.y,pxz.y);
-  vec2 sg=vec2(atan(p.x,p.z)*2.6,asin(clamp(p.y,-1.,1.))*3.2);
-  vec2 sc=floor(sg),sf=fract(sg);
-  float sbit=step(.5,hash3(vec3(sc*2.3+floor(sf*vec2(3.,4.))*.7,floor(uTime*2.+hash3(vec3(sc,4.))*9.))))*step(.12,sf.x)*step(sf.x,.88)*step(.1,sf.y)*step(sf.y,.9);
-  vec3 core=uBase*1.5+uMid*sbit*(.35+.65*z)*.9+uLight*pow(1.-z,3.)*.6;
-  float lr=log(max(r,.02)/R);
-  float th=ang/6.2832;
-  float N=24.;
-  vec2 g=vec2(th*N+lr*3.,lr*7.+t*(1.1+1.5*uEnergy+uAmp));
-  vec2 cid=floor(g),cf=fract(g);
-  float lane=step(.55,hash3(vec3(mod(cid.x,N),3.,1.)+floor(t*.15+hash3(vec3(mod(cid.x,N),8.,8.)))));
-  float bit=step(.45,hash3(vec3(mod(cid.x,N),cid.y,floor(uTime*4.))+vec3(floor(cf*vec2(3.,4.))*.5,0.)));
-  float cell=step(.15,cf.x)*step(cf.x,.85)*step(.1,cf.y)*step(cf.y,.9);
-  float head=smoothstep(.75,1.,fract(cid.y*.13+hash3(vec3(mod(cid.x,N),1.,5.))));
-  float outside=step(R,r)*exp(-max(r-R,0.)*3.2)*smoothstep(.95,.7,r);
-  vec3 stream=(uMid+mix(uLight,vec3(1.),.5)*head*1.3)*bit*cell*lane*outside*(1.+uAmp*.7);
-  col=core*inside+stream*(1.-inside)+uMid*exp(-max(r-R,0.)*14.)*.35;
-  alpha=clamp(inside+max(stream.g,col.g*.6)*(1.-inside),0.,1.);
- }else if(uMat==3){
-  // Smoke: a dark smoke ball wrapped in an atmosphere of wisps. Inner layers turn faster than
-  // outer ones (differential rotation), which stretches the smoke into curling spirals.
-  float R=.38+breath+uAmp*.03;
-  float rr=max(r,.05);
-  float omega=.3*pow(R/rr,.8)*(1.+uEnergy);
-  float sa=t*.3*omega;
-  vec2 turb=vec2(fbm(vec3(uv*1.3,t*.08)),fbm(vec3(uv*1.3+4.,t*.08)))-.5;
-  vec2 ruv=mat2(cos(sa),-sin(sa),sin(sa),cos(sa))*(uv+turb*.35);
-  vec3 p=vec3(ruv*1.7,t*.12);
-  float w=fbm(p+fbm(p*1.6)*1.5);
-  float d=fbm(vec3(ruv*3.+w*1.8,t*.15));
-  float env=exp(-max(r-R,0.)*(4.2-uAmp*1.5));
-  float inside=smoothstep(R+.04,R-.06,r+(d-.5)*.12);
-  float dens=clamp(smoothstep(.38,.72,d)*env*1.25+inside,0.,1.);
-  float mask=smoothstep(.12,.35,dens);
-  vec3 c=mix(uLight,uMid,smoothstep(.3,.75,dens));
-  c=mix(c,uBase,smoothstep(.7,1.,dens)*(.4+.6*inside));
-  float curl=abs(fract(d*5.+w*2.)-.5)*2.;
-  c=mix(c,mix(uLight,vec3(1.),.3),smoothstep(.13,.0,curl)*smoothstep(.3,.8,dens)*.55*(1.-inside));
-  c=mix(c,mix(uBase,uMid,.35+.3*w),inside*.85);
-  c=mix(c,uLight*.9,inside*smoothstep(R-.1,R,r)*.5);
-  c=mix(c,uLight*1.05,smoothstep(.35,.12,dens)*mask*.6);
-  alpha=mask*(.7+.3*dens);
-  col=c*alpha;
+  bolts+=leap;
+  ballC+=(uLight*min(bolts,2.)*.55+white*smoothstep(.8,1.6,bolts)*.9+uLight*rim*(.35+scan)+white*rimCore*(.9+scan))*flick*(1.+thump*.8);
+  glowC=uMid*exp(-max(r-RE,0.)*10.)*.35*(.6+uEnergy+uAmp+thump)*smoothstep(RE-.12,RE,r);
+  ballA=max(ballA,clamp(max(ballC.r,max(ballC.g,ballC.b)),0.,1.));
  }else{
-  // Fire: a burning ball. Its surface churns; flames rise outward from it (convection),
-  // each tongue living and dying at random around the ball.
-  float R=.33+breath+uAmp*.02;
-  vec2 q=uv/R;float z=sqrt(max(0.,1.-dot(q,q)));
-  float sa=t*.12;vec2 nxz=mat2(cos(sa),-sin(sa),sin(sa),cos(sa))*vec2(q.x,z);vec3 n=vec3(nxz.x,q.y,nxz.y);
-  float heat=clamp(fbm(n*3.+vec3(0.,0.,t*.45))*.9+fbm(n*6.-vec3(t*.35))*.45,0.,1.);
-  vec3 surf=mix(uMid,uLight,smoothstep(.3,.7,heat));
-  surf=mix(surf,uHot,smoothstep(.65,.95,heat));
-  surf=mix(uBase,surf,.55+.45*z);
-  float inside=smoothstep(R+px,R-px,r);
-  float h=max(r-R,0.)/R;
-  float fl=fbm(vec3(dir*2.4,h*1.8-t*1.2));
-  float fl2=fbm(vec3(dir*6.,h*3.6-t*2.));
-  float top=.25+.9*fl*fl+.35*fl2+uAmp*.45+uEnergy*.2;
-  float I=clamp((top-h)/max(top,.05),0.,1.)*(.55+.7*fl2);
-  I=clamp(I,0.,1.);
-  vec3 c=mix(uBase*.7,uBase,smoothstep(.0,.2,I));
-  c=mix(c,uMid,smoothstep(.15,.45,I));
-  c=mix(c,uLight,smoothstep(.45,.75,I));
-  c=mix(c,uHot,smoothstep(.85,1.,I));
-  float fa=smoothstep(.02,.25,I)*step(R-px,r);
-  col=surf*inside+c*fa*(1.-inside);
-  alpha=clamp(inside+fa*(1.-inside),0.,1.);
+  // Core ball.
+  vec3 n=normalize(vec3(q,z+.001));
+  float dif=dot(n,L);
+  float spin=t*.15*pace;
+  vec2 sxz=rot2(spin)*vec2(q.x,z);vec3 sp=vec3(sxz.x,q.y,sxz.y);
+  if(uMat==0){
+   float wob=.02*sin(3.*ang+t*1.7)+.014*sin(5.*ang-t*2.3)+uAmp*.03*sin(7.*ang+t*7.);
+   ball=smoothstep(R+wob+px,R+wob-px,r);
+   vec3 c=mix(uMid,uLight,step(.25,dif));
+   c=mix(c,uBase*1.2,step(dif,-.25)*.7);
+   float s=fbm(vec3(q*2.2,t*.5));
+   c=mix(c,mix(uLight,vec3(1.),.6),smoothstep(.02,.0,abs(s-.55))*step(.1,z));
+   c=mix(c,vec3(1.),smoothstep(.93,.97,dot(reflect(-L,n),vec3(0.,0.,1.))));
+   c=mix(c,mix(uLight,vec3(1.),.4),smoothstep(R-.03,R,r));
+   ballC=c;
+  }else if(uMat==2){
+   vec2 sg=vec2(atan(sp.x,sp.z)*2.6,asin(clamp(sp.y,-1.,1.))*3.2);
+   vec2 sc=floor(sg),sf=fract(sg);
+   float bit=step(.5,hash3(vec3(sc*2.3+floor(sf*vec2(3.,4.))*.7,floor(uTime*(2.+4.*uEnergy)+hash3(vec3(sc,4.))*9.))))*step(.12,sf.x)*step(sf.x,.88)*step(.1,sf.y)*step(sf.y,.9);
+   ballC=uBase*1.5+uMid*bit*(.35+.65*z)*(.9+uAmp)+uLight*pow(1.-z,3.)*.7;
+  }else if(uMat==3){
+   float sw=fbm(sp*2.2+vec3(0.,0.,t*.2));
+   float sw2=fbm(sp*4.5+sw*2.-vec3(t*.15));
+   vec3 c=mix(uMid,uBase,smoothstep(.3,.75,sw2));
+   float curl=abs(fract(sw2*5.+sw*2.)-.5)*2.;
+   c=mix(c,uLight*.9,smoothstep(.12,.0,curl)*.4);
+   c=mix(c,uLight,pow(1.-z,2.)*.55);
+   c*=.75+.35*dif;
+   ballC=c;
+  }else{
+   float heat=clamp(fbm(sp*3.+vec3(0.,0.,t*.45))*.9+fbm(sp*6.-vec3(t*.35))*.45+uAmp*.2,0.,1.);
+   vec3 c=mix(uMid,uLight,smoothstep(.3,.7,heat));
+   c=mix(c,uHot,smoothstep(.65,.95,heat));
+   ballC=mix(uBase,c,.55+.45*z)*(1.+thump*.5);
+   glowC=uMid*exp(-max(r-R,0.)*9.)*.5;
+  }
+  ballA=ball;ballC*=ball;
+  // Streams in orbit around the ball.
+  for(int i=0;i<3;i++){
+   float fi=float(i);
+   float vis=fi<.5?1.:fi<1.5?clamp(.55+uListen*.2+uAmp+uEnergy,0.,1.):clamp(uAmp*1.5+uEnergy*1.2+uAlert*.5,0.,1.);
+   float a=R*(1.32+.2*fi)+uEnergy*.02*sin(t*3.+fi);
+   float squash=.3+.12*fi+.05*sin(t*.2+fi);
+   float tilt=.55-.5*fi+.25*sin(t*.07+fi*2.);
+   float head=t*(.8+.3*fi)*pace+fi*2.1;
+   float arc=1.5+.7*fi+uEnergy*2.2+uAmp*.8;
+   float width=(uMat==3?.07:uMat==4?.045:.03)*(1.-fi*.15)*(.75+.5*uAmp+.25*uEnergy);
+   // Smoke and flame ribbons wave and drift; water stays crisp.
+   float wv=uMat==3?.07:uMat==4?.035:.012;
+   vec2 ouv=uv+(vec2(fbm(vec3(uv*3.,t*.5+fi)),fbm(vec3(uv*3.+7.,t*.5+fi)))-.5)*wv;
+   vec4 o=orbit(ouv,a,squash,tilt,head,arc,width*(uMat==3?1.5:1.),px);
+   vec3 sc;float sa=o.x*vis;
+   if(uMat==0){
+    // Water stream: toon shaded, a white streak along it, the tail breaking into drops.
+    sc=mix(uLight,uMid,smoothstep(-.2,1.,o.w));
+    sc=mix(sc,vec3(1.),smoothstep(.25,0.,abs(o.w+.45))*.85);
+    float drops=step(.45,vnoise(vec3(o.y*22.,fi,t*.5)));
+    sa*=mix(1.,drops,smoothstep(.55,.8,o.y));
+   }else if(uMat==2){
+    // Data ring: glyphs travelling along the orbit, the leading one bright.
+    float g=o.y*arc*14.;
+    float cell=fract(g),cid=floor(g);
+    float row=step(0.,o.w);
+    float bit=step(.42,hash3(vec3(cid,fi+row*3.,floor(uTime*(4.+6.*uEnergy)))+vec3(floor(cell*3.),floor(fract(o.w*.5+.5)*4.),0.)*.31));
+    float lit=bit*step(.15,cell)*step(cell,.85);
+    sc=mix(uMid,mix(uLight,vec3(1.),.6),smoothstep(.12,0.,o.y))*lit*1.4;
+    sa*=max(lit,.15);
+   }else if(uMat==3){
+    // Smoke stream: soft and textured, thinning out as it trails away.
+    float tex=fbm(vec3(o.y*5.-t*.4,o.w*1.5,fi+t*.1));
+    sc=mix(uLight,uMid,smoothstep(.35,.75,tex));
+    sc=mix(sc,uBase,smoothstep(.6,.9,tex)*.6);
+    float curl=abs(fract(tex*5.+o.y*3.)-.5)*2.;
+    sc=mix(sc,mix(uLight,vec3(1.),.3),smoothstep(.12,.0,curl)*.5);
+    sa*=smoothstep(.25,.55,tex+.25*(1.-o.y))*(1.-o.y*.6)*smoothstep(1.,.15,abs(o.w));
+   }else{
+    // Fire stream: a ribbon of flame flickering along the orbit.
+    float fl=fbm(vec3(o.y*7.-t*3.,o.w*1.4,fi+t*.6));
+    float I=clamp((1.-o.y)*.9+fl*.7-abs(o.w)*.8,0.,1.);
+    sc=mix(uBase,uMid,smoothstep(.15,.45,I));
+    sc=mix(sc,uLight,smoothstep(.45,.75,I));
+    sc=mix(sc,uHot,smoothstep(.8,1.,I));
+    sa*=smoothstep(.12,.35,I);
+   }
+   sc*=sa;
+   if(o.z>.5){frontC=frontC+sc*(1.-frontA);frontA=frontA+sa*(1.-frontA);}
+   else{backC=backC+sc*(1.-backA);backA=backA+sa*(1.-backA);}
+  }
+  if(uMat==4){
+   // Embers thrown out of the burning ball.
+   for(int i=0;i<6;i++){
+    float fi=float(i);
+    float cyc=uTime*(.5+.3*hash3(vec3(fi,2.,2.)))*pace+hash3(vec3(fi,8.,1.));
+    float id=floor(cyc),life=fract(cyc);
+    float a=6.2832*hash3(vec3(fi,id,3.));
+    vec2 e=vec2(cos(a),sin(a))*(R+life*(.25+.2*hash3(vec3(fi,id,6.))))+vec2(0.,life*life*.12);
+    float spark=smoothstep(.012,.0,length(uv-e))*(1.-life);
+    frontC+=uHot*spark;frontA=max(frontA,spark);
+   }
+  }
  }
- // A follow-up is ready: a warm, slow pulse around any material.
- float pulse=.5+.5*sin(uTime*6.5);
- vec3 warm=vec3(1.,.62,.38);
- float halo=exp(-max(r-.55,0.)*7.)*uAlert*pulse*.55*smoothstep(.35,.6,r);
- col+=warm*halo;alpha=clamp(max(alpha,halo),0.,1.);
+ // Analysis: a thin scanning ring sweeps round the ball.
+ float ringR=R*1.18;
+ float scanRing=uEnergy*smoothstep(.006,.0,abs(r-ringR))*smoothstep(.5,1.,cos(ang-uTime*4.5))*(uMat==1?0.:1.);
+ // Follow-up ready: a heartbeat and a shock wave leaving the ball.
+ float waveR=R*(uMat==1?1.45:1.)+beat*.45;
+ float wave=uAlert*smoothstep(.02,.0,abs(r-waveR))*(1.-beat)*.9;
+ vec3 warm=mix(uLight,vec3(1.,.66,.4),.45);
+ vec3 fx=uLight*scanRing+warm*wave;
+ float fxA=clamp(scanRing+wave,0.,1.);
+ float glowA=clamp(max(glowC.r,max(glowC.g,glowC.b)),0.,1.);
+ vec3 col=frontC+(1.-frontA)*(ballC+(1.-ballA)*(backC+glowC*(1.-backA)));
+ float alpha=frontA+(1.-frontA)*(ballA+(1.-ballA)*(backA+(1.-backA)*glowA));
+ col+=fx*(1.-alpha*.5);alpha=clamp(max(alpha,fxA),0.,1.);
  gl_FragColor=vec4(col,alpha);
 }`;
 
@@ -185,7 +237,7 @@ void main(){
   const seed = Math.random() * 50;
   const reduceMotion = window.matchMedia?.('(prefers-reduced-motion: reduce)');
   let gl = null, uniforms = {}, raf = 0, rafView = null, lastFrame = 0, lastDraw = 0;
-  let amp = 0, energy = 0, alert = 0;
+  let amp = 0, energy = 0, alert = 0, listen = 0;
   // Voice level: from an analysed microphone stream when there is one, otherwise short pulses on recognised speech.
   let analyser = null, audioContext = null, samples = null, pulseLevel = 0, pulseAt = 0;
 
@@ -228,7 +280,7 @@ void main(){
       gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1, -1, 3, -1, -1, 3]), gl.STATIC_DRAW);
       const position = gl.getAttribLocation(program, 'a'); gl.enableVertexAttribArray(position); gl.vertexAttribPointer(position, 2, gl.FLOAT, false, 0, 0);
       uniforms = {};
-      for (const name of ['uRes', 'uTime', 'uAmp', 'uEnergy', 'uAlert', 'uSeed', 'uLife', 'uMat', 'uLight', 'uMid', 'uHot', 'uBase']) uniforms[name] = gl.getUniformLocation(program, name);
+      for (const name of ['uRes', 'uTime', 'uAmp', 'uEnergy', 'uAlert', 'uListen', 'uSeed', 'uLife', 'uMat', 'uLight', 'uMid', 'uHot', 'uBase']) uniforms[name] = gl.getUniformLocation(program, name);
       gl.clearColor(0, 0, 0, 0);
       return true;
     } catch { gl?.getExtension('WEBGL_lose_context')?.loseContext(); gl = null; return false; }
@@ -270,6 +322,7 @@ void main(){
     const still = reduceMotion?.matches;
     const fast = still ? 1 : 1 - Math.exp(-delta * (targetAmp > amp ? 14 : 5)), slow = still ? 1 : 1 - Math.exp(-delta * 2.5);
     amp += (targetAmp - amp) * fast; energy += (targetEnergy - energy) * slow; alert += (targetAlert - alert) * slow;
+    listen += ((listening ? 1 : 0) - listen) * slow;
     // Phones have dense screens: 1.5 pixels per CSS pixel is enough for a small bubble.
     const ratio = Math.min(companion.ownerDocument.defaultView.devicePixelRatio || 1, window.InterpreteNative ? 1.5 : 2);
     const width = Math.max(1, Math.round(canvas.clientWidth * ratio)), height = Math.max(1, Math.round(canvas.clientHeight * ratio));
@@ -277,12 +330,12 @@ void main(){
     const material = MATERIALS[companion.ownerDocument.documentElement.dataset.theme] || MATERIALS.pastel;
     gl.viewport(0, 0, width, height);
     gl.uniform2f(uniforms.uRes, width, height); gl.uniform1f(uniforms.uTime, still ? 14 : now / 1000);
-    gl.uniform1f(uniforms.uAmp, amp); gl.uniform1f(uniforms.uEnergy, energy); gl.uniform1f(uniforms.uAlert, alert);
+    gl.uniform1f(uniforms.uAmp, amp); gl.uniform1f(uniforms.uEnergy, energy); gl.uniform1f(uniforms.uAlert, alert); gl.uniform1f(uniforms.uListen, listen);
     gl.uniform1f(uniforms.uSeed, seed); gl.uniform1f(uniforms.uLife, LIFE); gl.uniform1i(uniforms.uMat, material.id);
     gl.uniform3fv(uniforms.uLight, hex(material.light)); gl.uniform3fv(uniforms.uMid, hex(material.mid));
     gl.uniform3fv(uniforms.uHot, hex(material.hot)); gl.uniform3fv(uniforms.uBase, hex(material.base));
     gl.clear(gl.COLOR_BUFFER_BIT); gl.drawArrays(gl.TRIANGLES, 0, 3);
-    return amp > 0.02 || energy > 0.02 || alert > 0.02;
+    return amp > 0.02 || energy > 0.02 || alert > 0.02 || listen > 0.02;
   }
   function frame(now) {
     raf = 0;
