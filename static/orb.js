@@ -73,6 +73,62 @@ float smokeField(vec3 p,float st,float amp,float swirl){
  float n=vnoise(sp*6.-vec3(0.,st*.7,0.));
  return f+(n-.5)*.2-.5;
 }
+// Wild water: a 3D noise level set held by the invisible sphere, so the mass folds, crests and
+// throws spray in every direction instead of keeping a flat surface.
+float sdWild(vec3 p,float tt,float storm){
+ // A liquid ball churning in zero gravity: its surface is thrown into waves and crests.
+ vec3 q=yrot(p,tt*(.5+.6*storm)+length(p)*2.*storm);
+ vec3 q2=vec3(q.x,q.y*cos(tt*.3)-q.z*sin(tt*.3),q.y*sin(tt*.3)+q.z*cos(tt*.3));
+ float n=fbm3(q2*1.8+vec3(tt*.4,-tt*.3,tt*.35));
+ float n2=vnoise(q2*4.2-vec3(0.,tt*.9,0.));
+ float rr=.34+(n-.5)*(.34+.3*storm)+(n2-.5)*(.07+.08*storm);
+ float d=max(length(p)-.58,(length(p)-rr)*.55);
+ for(int i=0;i<7;i++){
+  float fi=float(i);
+  float cyc=tt*(.45+.08*fi)+hash3(vec3(fi,3.,3.));
+  float life=fract(cyc),id=floor(cyc);
+  vec3 dir=normalize(vec3(hash3(vec3(fi,id,1.)),hash3(vec3(fi,id,2.)),hash3(vec3(fi,id,3.)))-.5);
+  vec3 c=dir*(.3+life*(.3+.25*storm));
+  float rr=(.03+.025*hash3(vec3(fi,id,4.)))*(1.-life*.5)*(.4+storm);
+  d=min(d,length(p-c)-rr);
+ }
+ return d;
+}
+// Fire density for a volumetric, emissive flame: rising turbulence, a sway that grows with height,
+// and tongues that are born, detach and die (cells of a rising lattice with their own lifetimes).
+float fireDensity(vec3 p,float ft,float amp,float swirl){
+ float h=p.y+.4;
+ vec3 sp=yrot(p,swirl*ft*.6);
+ sp.x+=sin(ft*1.3+h*3.)*.06*h+sin(ft*2.1+h*5.)*.03*h;
+ sp.z+=cos(ft*1.1+h*2.7)*.05*h;
+ vec3 np=vec3(sp.x*3.,h*2.-ft*2.2,sp.z*3.);
+ vec3 w=vec3(fbm3(np*.7),fbm3(np*.7+5.),fbm3(np*.7+9.))-.5;
+ float turb=fbm3(np+w*1.6);
+ float width=(.42+.1*amp)*(1.-smoothstep(0.,1.2,h)*.8);
+ float body=1.-length(vec2(sp.x,sp.z))/max(width,.02);
+ float base=smoothstep(-.05,.12,h);
+ float tongue=0.;
+ vec3 cell=vec3(sp.x*4.,h*2.5-ft*1.6,sp.z*4.);
+ vec3 ci=floor(cell);
+ float life=fract(ft*.8+hash3(ci));
+ tongue=smoothstep(.55,.0,length(fract(cell)-.5))*(1.-life)*step(hash3(ci+7.),.45+.3*amp)*smoothstep(.25,.6,h);
+ float d=body+(turb-.5)*1.4+tongue*.8;
+ return clamp(d,0.,1.)*base*smoothstep(1.35,.85,h);
+}
+// Wispy smoke: thin ridged filaments wound into a helix (spiral) that widens as it rises.
+float smokeDensity(vec3 p,float st,float amp,float swirl){
+ float h=p.y+.25;
+ float r=length(vec2(p.x,p.z));
+ vec3 q=yrot(p,h*(2.2+swirl*2.)-st*(.6+swirl*1.5));
+ vec3 np=q*vec3(2.6,1.6,2.6)-vec3(0.,st*.55,0.);
+ vec3 w=vec3(fbm3(np),fbm3(np+3.1),fbm3(np+6.7))-.5;
+ float n=fbm3(np*1.4+w*2.2);
+ float ridge=1.-abs(2.*n-1.);
+ ridge=pow(ridge,4.);
+ float plume=smoothstep(.12+h*.22,.0,abs(r-(.08+h*.16)))*smoothstep(-.05,.2,h)*smoothstep(1.05,.55,h);
+ float source=smoothstep(.2,.0,abs(length(p)-.3))*.6;
+ return ridge*(plume*(1.+amp)+source);
+}
 // Liquid in an invisible sphere: a sloshing surface, ripples, a whirlpool during analysis, drops thrown about.
 float sdLiquid(vec3 p,float Rc,float tt,float slosh,float whirl,float drops){
  float rr=length(vec2(p.x,p.z));
@@ -185,112 +241,99 @@ void main(){
   float jit=hash3(vec3(gl_FragCoord.xy,uTime));
   float R3=(.33+uAmp*.02)*(1.+.08*thump);
   if(uMat==0){
-   // Water that churns inside an invisible sphere.
-   float Rc=.56;
-   vec2 bb=isph(ro,rd,Rc);
-   float slosh=.12+.18*uListen*(.4+uAmp)+.1*uEnergy+.25*thump;
-   float whirl=uEnergy;
-   float drops=clamp(uAmp*1.6+uEnergy*.6+thump,0.,1.);
-   float tt=t*(.8+pace*.6);
+   // Wild water in an invisible sphere: the mass folds and crests, foam caps it, spray flies.
+   // Shading follows real water: Fresnel reflection of the sky, absorbed colour seen through it.
+   float tt=t*(.9+pace*.7);
+   float storm=clamp(.25+.35*uListen+uAmp*.8+uEnergy*.6+thump*.8,0.,1.6);
+   vec2 bb=isph(ro,rd,.7);
    if(bb.x>0.){
     float tm=bb.x;float hit=0.;vec3 p=ro;
-    for(int i=0;i<40;i++){
+    for(int i=0;i<48;i++){
      p=ro+rd*tm;
-     float d=sdLiquid(p,Rc,tt,slosh,whirl,drops);
+     float d=sdWild(p,tt,storm);
      if(d<.0015){hit=1.;break;}
-     tm+=max(d*.8,.004);
+     tm+=max(d*.7,.004);
      if(tm>bb.y)break;
     }
     if(hit>.5){
-     vec2 e=vec2(.003,0.);
-     vec3 n=normalize(vec3(sdLiquid(p+e.xyy,Rc,tt,slosh,whirl,drops)-sdLiquid(p-e.xyy,Rc,tt,slosh,whirl,drops),
-                          sdLiquid(p+e.yxy,Rc,tt,slosh,whirl,drops)-sdLiquid(p-e.yxy,Rc,tt,slosh,whirl,drops),
-                          sdLiquid(p+e.yyx,Rc,tt,slosh,whirl,drops)-sdLiquid(p-e.yyx,Rc,tt,slosh,whirl,drops)));
-     float dif=clamp(dot(n,L3),0.,1.);
-     float fres=pow(1.-max(dot(n,-rd),0.),3.);
-     float wall=smoothstep(Rc-.04,Rc-.005,length(p));
-     float top=smoothstep(.3,.7,n.y)*(1.-wall*.7);
-     vec3 c=mix(uBase,uMid,smoothstep(-.6,.15,p.y));
-     c=mix(c,uLight,dif*.45+top*.35);
-     c=mix(c,vec3(1.),smoothstep(.75,.95,vnoise(vec3(p*9.+tt*.4)))*top*.5);
-     c=mix(c,vec3(1.),smoothstep(.55,.85,top)*wall*.9);
-     c+=vec3(1.)*pow(max(dot(reflect(-L3,n),-rd),0.),48.)*.9;
-     c=mix(c,mix(uLight,vec3(1.),.4),fres*.5);
+     vec2 e=vec2(.004,0.);
+     vec3 n=normalize(vec3(sdWild(p+e.xyy,tt,storm)-sdWild(p-e.xyy,tt,storm),sdWild(p+e.yxy,tt,storm)-sdWild(p-e.yxy,tt,storm),sdWild(p+e.yyx,tt,storm)-sdWild(p-e.yyx,tt,storm)));
+     float cosT=max(dot(n,-rd),0.);
+     float fres=.02+.98*pow(1.-cosT,5.);
+     vec3 rf=reflect(rd,n);
+     vec3 sky=mix(uMid*.9,mix(uLight,vec3(1.),.6),smoothstep(-.2,.8,rf.y));
+     // Light that went into the water comes back absorbed: thicker water is deeper blue.
+     float thick=0.;vec3 pi=p-n*.01;
+     for(int k=0;k<5;k++){pi+=refract(rd,n,.75)*.06;thick+=step(sdWild(pi,tt,storm),0.)*.06;}
+     vec3 body=mix(uLight*.95,uBase*.9,clamp(thick*3.,0.,1.));
+     body*=.65+.45*clamp(dot(n,L3),0.,1.);
+     vec3 c=mix(body,sky,fres);
+     c+=vec3(1.)*pow(max(dot(rf,L3),0.),90.)*1.4;
+     float foam=smoothstep(.62,.8,vnoise(p*14.+vec3(0.,tt*.8,0.)))*smoothstep(.15,.7,n.y)*(.4+storm*.6);
+     foam+=smoothstep(.42,.56,length(p))*.45*storm;
+     c=mix(c,vec3(1.),clamp(foam,0.,1.));
      ballC=c;ballA=1.;
     }
    }
   }else if(uMat==4){
-   // Fire: a dense flame drawn in layers (red rim, orange, yellow heart), no visible ball.
-   float ft=t*(.7+.5*pace);
-   float amp=uAmp+.5*thump;
-   vec2 bb=isph(ro,rd,1.);
+   // Volumetric fire: emission follows a blackbody ramp (dark red, orange, yellow, white),
+   // turbulence makes it dance, tongues are born and detach.
+   float ft=t*(.9+.6*pace);
+   float amp=uAmp+.6*thump;
+   vec2 bb=isph(ro,rd,1.15);
+   vec3 acc=vec3(0.);float a=0.;
    if(bb.x>0.){
-    float tm=bb.x+jit*.03;float hit=0.;vec3 p=ro;float glow=0.;
-    for(int i=0;i<48;i++){
-     p=ro+rd*tm;
-     float f=flameField(p,ft,amp,uEnergy);
-     if(f>0.){hit=1.;break;}
-     glow+=exp(f*14.)*.035;
-     tm+=clamp(-f*.45,.012,.06);
-     if(tm>bb.y)break;
-    }
-    if(hit>.5){
-     float h1=flameField(p+rd*.06,ft,amp,uEnergy),h2=flameField(p+rd*.14,ft,amp,uEnergy);
-     float heat=clamp(max(h1,h2)*4.,0.,1.);
-     vec3 c=uBase;
-     c=mix(c,uMid,smoothstep(.08,.16,heat));
-     c=mix(c,uLight,smoothstep(.32,.42,heat));
-     c=mix(c,uHot,smoothstep(.6,.7,heat));
-     c=mix(c,mix(uHot,vec3(1.),.6),smoothstep(.85,.95,heat));
-     c*=1.+thump*.4;
-     ballC=c;ballA=1.;
-    }else{
-     vec3 gc=mix(uBase,uMid,.5);
-     ballC=gc*min(glow,1.)*.8;ballA=min(glow,1.)*.6;
+    float span=bb.y-bb.x;
+    for(int i=0;i<36;i++){
+     float tm=bb.x+span*(float(i)+jit)/36.;
+     vec3 p=ro+rd*tm;
+     float d=fireDensity(p,ft,amp,uEnergy);
+     if(d>.002){
+      float T=pow(d,1.6)*(1.3-.35*clamp(p.y+.3,0.,1.));
+      vec3 bbc=vec3(1.,.28+.72*smoothstep(.15,.85,T),.06+.94*smoothstep(.55,1.15,T))*smoothstep(.0,.35,T);
+      bbc=mix(bbc,uMid*1.2,.2);
+      acc+=bbc*d*span/36.*7.;
+      a+=d*span/36.*5.;
+     }
     }
    }
-   for(int i=0;i<8;i++){
+   ballC=acc*(1.+thump*.4);ballA=clamp(a,0.,1.);
+   for(int i=0;i<10;i++){
     float fi=float(i);
-    float cyc=uTime*(.22+.1*hash3(vec3(fi,2.,2.)))*(.6+pace)+hash3(vec3(fi,8.,1.));
+    float cyc=uTime*(.25+.12*hash3(vec3(fi,2.,2.)))*(.6+pace)+hash3(vec3(fi,8.,1.));
     float id=floor(cyc),life=fract(cyc);
-    float a=6.2832*hash3(vec3(fi,id,3.));
-    vec3 e3=vec3(cos(a)*.2,.25+life*(.6+.25*hash3(vec3(fi,id,6.))),sin(a)*.2)+vec3(sin(life*7.+fi)*.06,0.,0.);
+    float an=6.2832*hash3(vec3(fi,id,3.));
+    vec3 e3=vec3(cos(an)*.15,.1+life*(.75+.3*hash3(vec3(fi,id,6.))),sin(an)*.15)+vec3(sin(life*9.+fi)*.08,0.,cos(life*7.+fi)*.05);
     vec3 pc=e3-ro;float zc=dot(pc,fw);
     vec2 s2=vec2(dot(pc,rt),dot(pc,up))/(zc*.36);
-    float spark=smoothstep(.013,.0,length(uv-s2))*(1.-life)*smoothstep(.0,.1,life);
-    frontC+=uHot*spark;frontA=max(frontA,spark);
+    float spark=smoothstep(.01,.0,length(uv-s2))*(1.-life)*smoothstep(.0,.1,life);
+    frontC+=mix(uHot,vec3(1.,.7,.3),.5)*spark*1.3;frontA=max(frontA,spark);
    }
   }else if(uMat==3){
-   // Smoke: dense billows with drawn shading (pale lit tops, dark heart), escaping upward.
-   float st=t*(.55+.5*pace);
-   float amp=uAmp+.5*uListen*.3+thump*.4;
-   // Ink smoke: pale where the smoke is thin (its curling edges), dark where it is thick (its heart).
-   vec2 bb=isph(ro,rd,1.2);
+   // Wispy smoke in spirals, lit like real smoke: light is absorbed along the way (Beer-Lambert),
+   // the side facing the light is brighter, thin wisps stay translucent.
+   float st=t*(.6+.5*pace);
+   float amp=uAmp+.3*uListen+.5*thump;
+   vec2 bb=isph(ro,rd,1.25);
+   vec3 acc=vec3(0.);float T=1.;
    if(bb.x>0.){
-    float span=bb.y-bb.x;float thick=0.;float topLit=0.;float wsum=0.;
+    float span=bb.y-bb.x;
     for(int i=0;i<40;i++){
      float tm=bb.x+span*(float(i)+jit)/40.;
      vec3 p=ro+rd*tm;
-     float f=smokeField(p,st,amp,uEnergy);
-     float d=smoothstep(-.02,.1,f);
-     thick+=d*span/40.;
-     topLit+=d*p.y;wsum+=d;
+     float d=smokeDensity(p,st,amp,uEnergy);
+     if(d>.003){
+      float sh=smokeDensity(p+L3*.1,st,amp,uEnergy)+smokeDensity(p+L3*.22,st,amp,uEnergy);
+      float light=exp(-sh*2.6)*(.75+.25*smoothstep(-.3,.9,p.y));
+      vec3 c=mix(uBase*1.3,uLight,light);
+      float ext=d*span/40.*12.;
+      float aa=1.-exp(-ext);
+      acc+=T*c*aa;T*=1.-aa;
+      if(T<.03)break;
+     }
     }
-    float k=thick*2.6;
-    float alpha=smoothstep(.02,.12,thick);
-    float tone=clamp(1.-k*.55+(wsum>0.?topLit/wsum:0.)*.25,0.,1.);
-    float band=(floor(tone*4.)+smoothstep(.8,1.,fract(tone*4.)))/4.;
-    vec3 c=uBase*1.4;
-    c=mix(c,mix(uBase,uMid,.5),smoothstep(.2,.3,band));
-    c=mix(c,uMid,smoothstep(.45,.55,band));
-    c=mix(c,mix(uMid,uLight,.75),smoothstep(.7,.8,band));
-    c=mix(c,uLight,smoothstep(.92,1.,band));
-    vec3 pm=ro+rd*(bb.x+span*.5);
-    float sw=fbm3(yrot(pm,st*.3)*4.5+vec3(0.,-st*.4,0.)+vec3(uv*2.,0.));
-    float stroke=smoothstep(.06,.0,abs(fract(sw*5.)-.5))*smoothstep(.15,.6,tone)*.45;
-    c=mix(c,mix(uMid,uLight,.85),stroke);
-    ballC=c*alpha;ballA=alpha;
    }
+   ballC=acc;ballA=1.-T;
   }else{
    // Data: glyphs swarming over the invisible sphere, and packets sent out from it.
    float Rd=R3*1.15;
