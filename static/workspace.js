@@ -3,10 +3,12 @@
 (() => {
   const MAX_FILE = 8 * 1024 * 1024, MAX_TOTAL = 64 * 1024 * 1024;
   const archive = window.InterpreteArchive;
-  const records = new Map(); let database;
+  const records = new Map(), extracting = new Set(); let database;
   const el = (tag, text, cls) => { const n = document.createElement(tag); if (text !== undefined) n.textContent = text; if (cls) n.className = cls; return n; };
   const button = (text, action) => { const n = el('button', text); n.type = 'button'; n.onclick = action; return n; };
-  const opener = button('Dossier d’enquête · pièces et outils', () => dialog.showModal()); opener.className = 'workspace-open';
+  const companionRoot = document.getElementById('companion');
+  // The companion may live in a Document Picture-in-Picture window: open dialogs there.
+  const opener = button('Dossier d’enquête · pièces et outils', () => { const host = companionRoot.ownerDocument; if (dialog.ownerDocument !== host || !dialog.isConnected) host.body.append(dialog); dialog.showModal(); }); opener.className = 'workspace-open';
   document.querySelector('.osint-tools').before(opener);
   const dialog = el('dialog', undefined, 'investigation'); dialog.setAttribute('aria-label', 'Dossier d’enquête');
   const header = el('header'); header.append(el('h2', 'Votre dossier d’enquête'), button('Fermer', () => dialog.close()));
@@ -52,19 +54,23 @@
       preview.append(el('pre', record.text || 'Texte non extrait. Pour un PDF ou une image, utilisez le bouton d’extraction locale. L’original reste conservé.'));
       if(record.type==='application/pdf'||/\.pdf$/i.test(record.name)||/^image\/(png|jpeg|webp)$/.test(record.type)) {
         const extract=button('Extraire le texte · PDF / OCR local',async()=>{
-          extract.disabled=true;
+          if(extracting.has(record.id))return;
+          extracting.add(record.id);extract.disabled=true;
           try {
             const result=await window.InterpreteDocuments.extract(record.blob,message=>{status.textContent=message;});
-            await save({...record,...result});
+            // Re-read the record: notes may have been saved while the extraction ran.
+            const current=records.get(record.id);
+            if(!current){status.textContent='La pièce a été supprimée pendant l’extraction.';return;}
+            await save({...current,...result});
             status.textContent=(result.text.trim()?'Texte extrait localement. ':'Aucun texte détecté. ')+(result.incomplete?'Extraction partielle (50 pages / 200 000 caractères maximum). ':'')+(result.extraction_method==='tesseract'?'OCR automatique à relire dans l’original.':'PDF scanné sans texte : OCR nécessaire sur ses images.');
           }catch(error){status.textContent='Extraction impossible : '+(error.message||'format non pris en charge.');}
-          finally{extract.disabled=false;}
-        });card.append(extract);
+          finally{extracting.delete(record.id);if(extract.isConnected)extract.disabled=false;else render();}
+        });extract.disabled=extracting.has(record.id);card.append(extract);
       }
       const use = button('Préparer une vérification', () => {
         const excerpt = notes.value.trim() || record.text;
         if (!excerpt) { status.textContent = 'Ajoutez d’abord le passage à vérifier dans les notes.'; return; }
-        const composer = document.getElementById('transcript');
+        const composer = companionRoot.querySelector('#transcript');
         if (composer.value.trim() && !window.confirm('Remplacer le texte actuellement saisi par cet extrait ?')) return;
         composer.value = excerpt.slice(0, 20000); composer.dispatchEvent(new Event('input', {bubbles:true})); dialog.close(); composer.focus();
       });

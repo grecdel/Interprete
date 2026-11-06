@@ -450,6 +450,11 @@ if (desktop) {
   ui['settings-button'].onclick = () => toggleSettings(ui['settings-tray'].hidden);
   ui['quit-desktop'].onclick = () => desktop.quit();
   desktop.onOpen(() => { if(!window.InterpreteLauncher)setPanelOpen(true); });
+  desktop.onService?.(state => {
+    if (state === 'restarting') showError('Le service de recherche s’est arrêté. Redémarrage en cours ; votre session est conservée.');
+    else if (state === 'ready') { ui.error.hidden = true; refreshConfiguration(); }
+    else showError('Le service de recherche ne redémarre pas. Exportez votre session depuis l’archive, puis relancez Interprete.');
+  });
   desktop.settings().then(settings => {
     ui['remember-key'].disabled = !settings.canRemember;
     if (!settings.canRemember) ui['storage-help'].textContent = 'Aucun coffre sécurisé disponible : la clé restera uniquement en mémoire.';
@@ -473,7 +478,10 @@ if (desktop) {
       floatingSize = {width: Math.min(460, Math.max(360, Math.round(screen.availWidth / 4))), height: Math.min(780, Math.max(480, screen.availHeight - 100))};
       floatingWindow = await window.documentPictureInPicture.requestWindow(floatingSize);
       const pip = floatingWindow;
-      pip.document.title = 'Interprete'; pip.document.documentElement.lang = 'fr'; pip.document.body.className = 'pip-body';
+      pip.document.title = 'Interprete'; pip.document.documentElement.lang = 'fr';
+      // Carry the theme and companion classes over: the floating window has its own <html> and <body>.
+      pip.document.documentElement.dataset.theme = document.documentElement.dataset.theme || 'pastel';
+      pip.document.body.className = ['pip-body', ...[...document.body.classList].filter(name => name !== 'is-detached')].join(' ');
       const stylesheet = pip.document.createElement('link'); stylesheet.rel = 'stylesheet'; stylesheet.href = new URL('/style.css', window.location.href).href;
       pip.document.head.append(stylesheet);
       pip.document.body.append(document.querySelector('.icon-library').cloneNode(true), companion);
@@ -482,6 +490,8 @@ if (desktop) {
       setPanelOpen(true);
       pip.addEventListener('pagehide', () => {
         stopListening();
+        for (const name of pip.document.body.classList) if (name !== 'pip-body') document.body.classList.add(name);
+        if (!pip.document.body.classList.contains('launcher-visible')) document.body.classList.remove('launcher-visible');
         document.body.append(companion); floatingWindow = null;
         document.body.classList.remove('is-detached'); document.getElementById('detached-message').hidden = true;
         ui.detach.setAttribute('aria-label', 'Ouvrir en fenêtre flottante'); ui.detach.title = 'Rester au-dessus des autres applications';
@@ -509,7 +519,7 @@ refreshConfiguration().then(() => { scheduleLive(); });
   }
   function apply(value, notify = true) {
     const theme = Object.hasOwn(themes, value) ? value : 'pastel';
-    document.documentElement.dataset.theme = theme; select.value = theme;
+    document.documentElement.dataset.theme = theme; companion.ownerDocument.documentElement.dataset.theme = theme; select.value = theme;
     if(notify)window.interpreteDesktop?.setTheme?.(theme)?.catch(() => {});
     document.querySelector('meta[name="theme-color"]')?.setAttribute('content', theme === 'pastel' ? '#f3eff9' : theme === 'matrix' ? '#030c08' : '#10131d');
   }
@@ -533,7 +543,7 @@ refreshConfiguration().then(() => { scheduleLive(); });
     const link = document.createElement('a'); link.textContent = name; link.target = '_blank'; link.rel = 'noopener noreferrer';
     link.href = 'https://www.google.com/search?q=' + encodeURIComponent(scope);
     link.addEventListener('click', () => {
-      const query = document.getElementById('transcript').value.trim().slice(0, 600);
+      const query = ui.transcript.value.trim().slice(0, 600);
       link.href = 'https://www.google.com/search?q=' + encodeURIComponent(scope + ' ' + query);
     }); links.append(link);
   }

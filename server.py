@@ -163,7 +163,7 @@ def source_key(url):
 
 
 def structured_checks(text, sources, kind, context=None):
-    """Only attach URLs actually returned in the search tool's annotations."""
+    """Only attach URLs actually returned by the search tool (citations or retrieved pages)."""
     try:
         value = json.loads(re.sub(r'^```(?:json)?\s*|\s*```$', '', text.strip()))
     except (ValueError, TypeError) as error:
@@ -256,7 +256,9 @@ def verify(transcript, opener=urllib.request.urlopen, kind='auto', context=None)
         'instructions': INSTRUCTIONS,
         'input': json.dumps({'type_contenu': kind, 'contenu_a_verifier': transcript,
                              'propos_anterieurs': context}, ensure_ascii=False),
-        'tools': [{'type': 'web_search_preview'}],
+        'tools': [{'type': 'web_search'}],
+        # Pages retrieved by the search tool: a JSON answer often carries no citation annotation.
+        'include': ['web_search_call.action.sources'],
         'tool_choice': 'required',
         'max_output_tokens': 4000,
         'store': False,
@@ -272,6 +274,13 @@ def verify(transcript, opener=urllib.request.urlopen, kind='auto', context=None)
         raise ValueError('La recherche est incomplète. Réessayez avec un extrait plus court.')
     paragraphs, sources = [], {}
     for item in result.get('output', []):
+        if item.get('type') == 'web_search_call':
+            action = item.get('action') if isinstance(item.get('action'), dict) else {}
+            for found in action.get('sources') or []:
+                url = found.get('url', '') if isinstance(found, dict) else ''
+                if isinstance(url, str) and public_url(url):
+                    sources.setdefault(url, {'url': url, 'title': found.get('title') or url})
+            continue
         if item.get('type') != 'message':
             continue
         for content in item.get('content', []):
@@ -291,6 +300,12 @@ def verify(transcript, opener=urllib.request.urlopen, kind='auto', context=None)
 
 
 class Handler(BaseHTTPRequestHandler):
+    def trusted_host(self):
+        # Blocks DNS rebinding: a hostile page resolved to 127.0.0.1 still sends its own Host header.
+        port = self.server.server_address[1]
+        host = self.headers.get('Host', '').strip().lower()
+        return host in {f'127.0.0.1:{port}', f'localhost:{port}', f'[::1]:{port}'}
+
     def authorized(self):
         expected = os.environ.get('INTERPRETE_DESKTOP_TOKEN')
         return not expected or secrets.compare_digest(self.headers.get('X-Interprete-Token', '').encode('utf-8'), expected.encode('utf-8'))
@@ -305,6 +320,8 @@ class Handler(BaseHTTPRequestHandler):
         self.wfile.write(data)
 
     def do_GET(self):
+        if not self.trusted_host():
+            return self.send_json(403, {'error': 'Hôte refusé'})
         if self.path == '/api/status':
             if not self.authorized():
                 return self.send_json(403, {'error': 'Accès réservé à l’application Interprete.'})
@@ -327,6 +344,8 @@ class Handler(BaseHTTPRequestHandler):
         self.wfile.write(data)
 
     def do_POST(self):
+        if not self.trusted_host():
+            return self.send_json(403, {'error': 'Hôte refusé'})
         if self.path not in ('/api/verify', '/api/transcribe', '/api/desktop/key', '/api/osint'):
             return self.send_json(404, {'error': 'Route introuvable'})
         if not self.authorized():

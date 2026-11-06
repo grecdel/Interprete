@@ -2,9 +2,11 @@
 (() => {
   const pending = new Map(), opened = [];
   let nextId = 0, microphone, preview;
+  // A page-specific prefix: replies queued natively for a previous page must not resolve this page's calls.
+  const pageId = Array.from(crypto.getRandomValues(new Uint32Array(2)), value => value.toString(36)).join('');
   function call(action, data = {}, timeout = 120000) {
     return new Promise((resolve, reject) => {
-      const id = 'rpc_' + (++nextId);
+      const id = 'rpc_' + pageId + '_' + (++nextId);
       const timer = setTimeout(() => { pending.delete(id); reject(new Error('Cette opération prend trop de temps. Réessayez.')); }, timeout);
       const raw=JSON.stringify({id,action,data});
       if(raw.length>15*1024*1024){clearTimeout(timer);reject(new Error('Dossier trop volumineux pour cet export. Exportez les pièces séparément.'));return;}

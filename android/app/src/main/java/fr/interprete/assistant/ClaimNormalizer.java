@@ -102,9 +102,17 @@ final class ClaimNormalizer {
                 String summary = Json.string(check, "summary", 3000), followUp = Json.string(check, "follow_up", 1500);
                 JSONArray evidence = strings(check.optJSONArray("evidence"), 3, 1500);
                 if (attached.length() == 0) {
-                    if (!"Informations insuffisantes".equals(verdict)) summary = "Cette conclusion n’a pas de source associée et ne peut pas être retenue sans vérification.";
+                    if (!"Informations insuffisantes".equals(verdict)) summary = "Cette conclusion n’a pas de source web associée et ne peut pas être retenue sans vérification.";
                     verdict = "Informations insuffisantes"; evidence = new JSONArray();
                     followUp = "Pouvez-vous préciser la source, la date et le périmètre de cette affirmation ?";
+                }
+                JSONArray limitations = strings(check.optJSONArray("limitations"), 3, 1000);
+                Set<String> hosts = new HashSet<>();
+                for (int n = 0; n < attached.length(); n++) hosts.add(URI.create(attached.optJSONObject(n).optString("url")).getHost());
+                if (hosts.size() == 1) {
+                    JSONArray withWarning = Json.array("Un seul site cité : le recoupement reste à compléter.");
+                    for (int n = 0; n < limitations.length(); n++) withWarning.put(limitations.opt(n));
+                    limitations = withWarning;
                 }
                 JSONArray connections = new JSONArray(), proposed = check.optJSONArray("connections");
                 if (proposed != null) for (int n = 0; n < Math.min(4, proposed.length()); n++) {
@@ -121,7 +129,7 @@ final class ClaimNormalizer {
                 checks.put(Json.object("claim", Json.string(check, "claim", 500), "verdict", verdict, "summary", summary,
                         "reasoning", Json.string(check, "reasoning", 5000), "evidence", evidence, "sources", attached,
                         "connections", connections, "follow_up", followUp, "source_excerpts", excerpts,
-                        "limitations", strings(check.optJSONArray("limitations"), 3, 1000), "review_required", true));
+                        "limitations", limitations, "review_required", true));
             }
         }
         JSONArray allSources = new JSONArray(); for (JSONObject source : sources.values()) allSources.put(source);

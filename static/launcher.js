@@ -15,15 +15,15 @@
   card.append(close,title,intro,welcome,choices);document.getElementById('companion').append(card);
   let onboarded=false,ready=false;
   function hidePanel(){panel.hidden=true;companion.classList.remove('is-open');orb.setAttribute('aria-expanded','false');}
-  function closeMenu(){card.hidden=true;document.body.classList.remove('launcher-visible');desktop?.setLauncherOpen?.(false);orb.focus();}
-  function show(){hidePanel();card.hidden=false;document.body.classList.add('launcher-visible');desktop?.setLauncherOpen?.(true);welcome.hidden=onboarded;choices.hidden=!onboarded;close.hidden=!onboarded;title.textContent=onboarded?'Que puis-je faire pour vous ?':'Bonjour, je suis Interprète.';intro.textContent=onboarded?'Choisissez comment commencer.':'Je vous aide à écouter, rechercher des sources et préparer vos relances. Choisissons d’abord mon apparence.';choices.querySelector('[data-action=record] span').textContent=wantedListening?'Mettre l’écoute audio en pause':'Écouter l’audio et lancer l’analyse';(onboarded?choices.querySelector('button'):theme).focus();}
+  function closeMenu(){card.hidden=true;companion.ownerDocument.body.classList.remove('launcher-visible');desktop?.setLauncherOpen?.(false);orb.focus();}
+  function show(){hidePanel();card.hidden=false;companion.ownerDocument.body.classList.add('launcher-visible');desktop?.setLauncherOpen?.(true);welcome.hidden=onboarded;choices.hidden=!onboarded;close.hidden=!onboarded;title.textContent=onboarded?'Que puis-je faire pour vous ?':'Bonjour, je suis Interprète.';intro.textContent=onboarded?'Choisissez comment commencer.':'Je vous aide à écouter, rechercher des sources et préparer vos relances. Choisissons d’abord mon apparence.';choices.querySelector('[data-action=record] span').textContent=wantedListening?'Mettre l’écoute audio en pause':'Écouter l’audio et lancer l’analyse';(onboarded?choices.querySelector('button'):theme).focus();}
   for(const [name,detail,action] of [
     ['Record','Écouter l’audio et lancer l’analyse','record'],
     ['Requête textuelle','Écrire une phrase, un article ou un lien','text'],
     ['Ouvrir le panneau latéral','Retrouver les outils et le dossier d’enquête','panel']
   ]){
     const button=create('button');button.type='button';button.dataset.action=action;button.append(create('strong',name),create('span',detail));
-    button.onclick=async()=>{card.hidden=true;document.body.classList.remove('launcher-visible');
+    button.onclick=async()=>{card.hidden=true;companion.ownerDocument.body.classList.remove('launcher-visible');
       if(action==='record'){if(wantedListening){await stopListening();setPanelOpen(true);}else await startListening();}
       else{setPanelOpen(true);if(action==='text')ui.transcript.focus();else if(desktop&&configured!==true){await refreshConfiguration();if(!configured)toggleSettings(true);}}
     };choices.append(button);

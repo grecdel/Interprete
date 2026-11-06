@@ -39,6 +39,25 @@ class VerificationTests(unittest.TestCase):
         self.assertEqual(len(result['sources']), 1)
         self.assertTrue(result['has_sources'])
 
+    def test_retrieved_pages_count_without_citation_annotations(self):
+        url = 'https://www.insee.fr/fr/statistiques'
+        response = {'status': 'completed', 'output': [
+            {'type': 'web_search_call', 'status': 'completed', 'action': {'sources': [
+                {'type': 'url', 'url': url, 'title': 'INSEE'}, {'type': 'url', 'url': 'http://127.0.0.1/'}]}},
+            {'type': 'message', 'content': [{'type': 'output_text', 'annotations': [], 'text': json.dumps(
+                {'checks': [{'claim': 'Une affirmation', 'verdict': 'À nuancer', 'source_urls': [url, 'https://inventee.example/']}]})}]}]}
+        def opener(request, timeout):
+            payload = json.loads(request.data)
+            self.assertEqual(payload['tools'], [{'type': 'web_search'}])
+            self.assertIn('web_search_call.action.sources', payload['include'])
+            return io.BytesIO(json.dumps(response).encode())
+        with patch.dict(os.environ, {'OPENAI_API_KEY': 'test-only'}):
+            result = verify('Une affirmation à vérifier.', opener)
+        self.assertEqual([source['url'] for source in result['sources']], [url])
+        check = result['checks'][0]
+        self.assertEqual(check['verdict'], 'À nuancer')
+        self.assertEqual(check['limitations'][0], 'Un seul site cité : le recoupement reste à compléter.')
+
     def test_no_citations_is_explicit(self):
         response = {'status': 'completed', 'output': [{'type': 'message', 'content': [
             {'type': 'output_text', 'text': json.dumps({'checks': [{'claim': 'Une affirmation.', 'verdict': 'Informations insuffisantes', 'source_urls': []}]}), 'annotations': []}]}]}

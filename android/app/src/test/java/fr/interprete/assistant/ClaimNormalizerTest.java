@@ -19,6 +19,7 @@ public class ClaimNormalizerTest {
         JSONObject check = result.getJSONArray("checks").getJSONObject(0);
         assertEquals("À nuancer", check.getString("verdict")); assertEquals(1, check.getJSONArray("sources").length());
         assertTrue(check.getBoolean("review_required"));
+        assertEquals("Un seul site cité : le recoupement reste à compléter.", check.getJSONArray("limitations").getString(0));
     }
     @Test public void fabricatedLinksAndPastStatementsCannotBecomeEvidence() throws Exception {
         JSONObject analysis = Json.object("checks", Json.array(Json.object("claim", "Une affirmation", "verdict", "Confirmé", "source_urls", Json.array("https://invented.example/"),
