@@ -131,13 +131,14 @@ void main(){
   let analyser = null, audioContext = null, samples = null, pulseLevel = 0, pulseAt = 0;
 
   const hex = value => { const n = parseInt(value.slice(1), 16); return [(n >> 16 & 255) / 255, (n >> 8 & 255) / 255, (n & 255) / 255]; };
-  // Software GPUs (SwiftShader, llvmpipe…) render the shader on the CPU and can freeze the page:
+  // Software or emulated GPUs (SwiftShader, llvmpipe, Android emulator…) can freeze the page:
   // the CSS bubble stays there, unless the viewer asked for WebGL (localStorage "interprete-orb" = "webgl").
   function softwareRenderer(context) {
     try {
       const info = context.getExtension('WEBGL_debug_renderer_info');
       const name = String(context.getParameter(info ? info.UNMASKED_RENDERER_WEBGL : context.RENDERER));
-      return /swiftshader|llvmpipe|softpipe|software|basic render/i.test(name);
+      // Emulated or virtual GPUs (Android emulator, VMs) are listed too: they can freeze the whole device.
+      return /swiftshader|llvmpipe|softpipe|software|basic render|emulator|gfxstream|translator|virgl|vmware|virtualbox|parallels/i.test(name);
     } catch { return false; }
   }
   function forced() { try { return localStorage.getItem('interprete-orb') === 'webgl'; } catch { return false; } }
@@ -208,7 +209,8 @@ void main(){
     const still = reduceMotion?.matches;
     const fast = still ? 1 : 1 - Math.exp(-delta * (targetAmp > amp ? 14 : 5)), slow = still ? 1 : 1 - Math.exp(-delta * 2.5);
     amp += (targetAmp - amp) * fast; energy += (targetEnergy - energy) * slow; alert += (targetAlert - alert) * slow;
-    const ratio = Math.min(companion.ownerDocument.defaultView.devicePixelRatio || 1, 2);
+    // Phones have dense screens: 1.5 pixels per CSS pixel is enough for a small bubble.
+    const ratio = Math.min(companion.ownerDocument.defaultView.devicePixelRatio || 1, window.InterpreteNative ? 1.5 : 2);
     const width = Math.max(1, Math.round(canvas.clientWidth * ratio)), height = Math.max(1, Math.round(canvas.clientHeight * ratio));
     if (canvas.width !== width || canvas.height !== height) { canvas.width = width; canvas.height = height; }
     const material = MATERIALS[companion.ownerDocument.documentElement.dataset.theme] || MATERIALS.pastel;
