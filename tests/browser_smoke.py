@@ -70,6 +70,8 @@ class BrowserChecks(unittest.TestCase):
     def setUp(self):
         self.context = self.browser.new_context(viewport={'width': 1440, 'height': 960}, accept_downloads=True)
         self.context.add_init_script(FAKE_MIC)
+        # Headless Chromium renders WebGL in software: opt in so the living bubble is exercised.
+        self.context.add_init_script("try { localStorage.setItem('interprete-orb', 'webgl'); } catch {}")
         self.page = self.context.new_page()
         self.errors, self.requests = [], []
         self.page.on('pageerror', lambda error: self.errors.append(str(error)))
@@ -136,6 +138,16 @@ class BrowserChecks(unittest.TestCase):
         self.page.wait_for_timeout(300)
         self.assertEqual(still, canvas.screenshot())
         self.page.emulate_media(reduced_motion='no-preference')
+
+    def test_orb_keeps_css_bubble_on_software_gpu(self):
+        # Without the opt-in, a software renderer (SwiftShader here) keeps the light CSS bubble.
+        page = self.browser.new_page()
+        page.goto(self.base)
+        page.wait_for_timeout(500)
+        expect(page.locator('#bubble .bubble-face')).to_be_visible()
+        self.assertEqual(page.locator('#bubble .orb-canvas').count(), 0)
+        self.assertFalse(page.evaluate("document.getElementById('companion').classList.contains('orb-gl')"))
+        page.close()
 
     def test_orb_keeps_css_bubble_without_webgl(self):
         page = self.browser.new_page()

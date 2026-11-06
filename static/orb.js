@@ -131,19 +131,36 @@ void main(){
   let analyser = null, audioContext = null, samples = null, pulseLevel = 0, pulseAt = 0;
 
   const hex = value => { const n = parseInt(value.slice(1), 16); return [(n >> 16 & 255) / 255, (n >> 8 & 255) / 255, (n & 255) / 255]; };
-  function setup() {
+  // Software GPUs (SwiftShader, llvmpipe…) render the shader on the CPU and can freeze the page:
+  // the CSS bubble stays there, unless the viewer asked for WebGL (localStorage "interprete-orb" = "webgl").
+  function softwareRenderer(context) {
+    try {
+      const info = context.getExtension('WEBGL_debug_renderer_info');
+      const name = String(context.getParameter(info ? info.UNMASKED_RENDERER_WEBGL : context.RENDERER));
+      return /swiftshader|llvmpipe|softpipe|software|basic render/i.test(name);
+    } catch { return false; }
+  }
+  function forced() { try { return localStorage.getItem('interprete-orb') === 'webgl'; } catch { return false; } }
+  const pause = ms => new Promise(resolve => setTimeout(resolve, ms));
+  async function setup() {
     gl = canvas.getContext('webgl', {alpha: true, premultipliedAlpha: true, antialias: false, powerPreference: 'low-power'});
     if (!gl) return false;
-    const shader = (type, source) => {
-      const value = gl.createShader(type); gl.shaderSource(value, source); gl.compileShader(value);
-      if (!gl.getShaderParameter(value, gl.COMPILE_STATUS)) throw new Error('Shader de la bulle refusé.');
-      return value;
-    };
+    if (softwareRenderer(gl) && !forced()) { gl.getExtension('WEBGL_lose_context')?.loseContext(); gl = null; return false; }
+    const shader = (type, source) => { const value = gl.createShader(type); gl.shaderSource(value, source); gl.compileShader(value); return value; };
     try {
       const program = gl.createProgram();
       gl.attachShader(program, shader(gl.VERTEX_SHADER, VERTEX)); gl.attachShader(program, shader(gl.FRAGMENT_SHADER, FRAGMENT));
       gl.linkProgram(program);
-      if (!gl.getProgramParameter(program, gl.LINK_STATUS)) throw new Error('Shader de la bulle refusé.');
+      // Compile without blocking the page when the browser allows it; the CSS bubble shows meanwhile.
+      const parallel = gl.getExtension('KHR_parallel_shader_compile');
+      if (parallel) {
+        const limit = performance.now() + 8000;
+        while (!gl.getProgramParameter(program, parallel.COMPLETION_STATUS_KHR)) {
+          if (performance.now() > limit) throw new Error('Shader de la bulle trop lent à préparer.');
+          await pause(50);
+        }
+      } else await pause(0);
+      if (!gl || !gl.getProgramParameter(program, gl.LINK_STATUS)) throw new Error('Shader de la bulle refusé.');
       gl.useProgram(program);
       const buffer = gl.createBuffer(); gl.bindBuffer(gl.ARRAY_BUFFER, buffer);
       gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1, -1, 3, -1, -1, 3]), gl.STATIC_DRAW);
@@ -152,7 +169,22 @@ void main(){
       for (const name of ['uRes', 'uTime', 'uAmp', 'uEnergy', 'uAlert', 'uSeed', 'uLife', 'uMat', 'uLight', 'uMid', 'uHot', 'uBase']) uniforms[name] = gl.getUniformLocation(program, name);
       gl.clearColor(0, 0, 0, 0);
       return true;
-    } catch { gl = null; return false; }
+    } catch { gl?.getExtension('WEBGL_lose_context')?.loseContext(); gl = null; return false; }
+  }
+  // Watchdog: if the device cannot keep about 12 images per second, return to the CSS bubble for good.
+  let watchStart = 0, watchFrames = 0, watched = false;
+  function giveUp() {
+    if (raf) { rafView?.cancelAnimationFrame(raf); raf = 0; }
+    companion.classList.remove('orb-gl');
+    const context = gl; gl = null; context?.getExtension('WEBGL_lose_context')?.loseContext();
+    canvas.remove();
+  }
+  function watch(now, delta) {
+    if (watched || reduceMotion?.matches) return;
+    if (!watchStart || delta > .5) { watchStart = now; watchFrames = 0; return; }
+    watchFrames++;
+    const elapsed = (now - watchStart) / 1000;
+    if (elapsed >= 2.5) { watched = true; if (watchFrames / elapsed < 12) giveUp(); }
   }
 
   function voiceLevel(now) {
@@ -195,7 +227,7 @@ void main(){
     const delta = Math.min(0.1, (now - (lastFrame || now)) / 1000); lastFrame = now;
     // Faster states get every frame; rest is capped at 30 images per second.
     const busy = amp > 0.02 || energy > 0.02 || alert > 0.02 || companion.classList.contains('is-listening');
-    if (busy || now - lastDraw >= IDLE_FRAME_MS - 1) { draw(now, Math.max(delta, (now - lastDraw) / 1000)); lastDraw = now; }
+    if (busy || now - lastDraw >= IDLE_FRAME_MS - 1) { const since = (now - lastDraw) / 1000; draw(now, Math.max(delta, since)); lastDraw = now; watch(now, since); if (!gl) return; }
     if (reduceMotion?.matches) return; // One still image of the material.
     rafView = companion.ownerDocument.defaultView; raf = rafView.requestAnimationFrame(frame);
   }
@@ -207,9 +239,8 @@ void main(){
   }
 
   canvas.addEventListener('webglcontextlost', event => { event.preventDefault(); gl = null; companion.classList.remove('orb-gl'); });
-  canvas.addEventListener('webglcontextrestored', () => { if (setup()) { companion.classList.add('orb-gl'); wake(); } });
-  if (!setup()) { canvas.remove(); return; }
-  companion.classList.add('orb-gl');
+  canvas.addEventListener('webglcontextrestored', () => { setup().then(ready => { if (ready) { companion.classList.add('orb-gl'); wake(); } }); });
+  setup().then(ready => { if (!ready) { canvas.remove(); return; } companion.classList.add('orb-gl'); wake(); });
 
   // Restart on anything that can make the bubble visible or change its state or theme.
   new MutationObserver(wake).observe(companion, {attributes: true, attributeFilter: ['class', 'hidden']});
