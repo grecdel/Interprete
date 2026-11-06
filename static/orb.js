@@ -16,14 +16,15 @@
   const IDLE_FRAME_MS = 1000 / 30; // Rest and breathing states are drawn at 30 images per second.
 
   const VERTEX = 'attribute vec2 a;void main(){gl_Position=vec4(a,0.,1.);}';
+  // Shared with Android: scripts/orb_agsl.py turns this GLSL into AGSL for the native overlay bubble.
   const FRAGMENT = `precision highp float;
 uniform vec2 uRes;uniform float uTime,uAmp,uEnergy,uAlert,uSeed,uLife;uniform int uMat;
 uniform vec3 uLight,uMid,uHot,uBase;
-float hash(vec3 p){p=fract(p*.3183099+.1);p*=17.;return fract(p.x*p.y*p.z*(p.x+p.y+p.z));}
-float noise(vec3 x){vec3 i=floor(x),f=fract(x);f=f*f*(3.-2.*f);
-return mix(mix(mix(hash(i),hash(i+vec3(1,0,0)),f.x),mix(hash(i+vec3(0,1,0)),hash(i+vec3(1,1,0)),f.x),f.y),
-mix(mix(hash(i+vec3(0,0,1)),hash(i+vec3(1,0,1)),f.x),mix(hash(i+vec3(0,1,1)),hash(i+vec3(1,1,1)),f.x),f.y),f.z);}
-float fbm(vec3 p){float s=0.,a=.5;for(int i=0;i<4;i++){s+=a*noise(p);p=p*2.03+vec3(1.7,9.2,3.1);a*=.5;}return s;}
+float hash3(vec3 p){p=fract(p*.3183099+.1);p*=17.;return fract(p.x*p.y*p.z*(p.x+p.y+p.z));}
+float vnoise(vec3 x){vec3 i=floor(x),f=fract(x);f=f*f*(3.-2.*f);
+return mix(mix(mix(hash3(i),hash3(i+vec3(1.,0.,0.)),f.x),mix(hash3(i+vec3(0.,1.,0.)),hash3(i+vec3(1.,1.,0.)),f.x),f.y),
+mix(mix(hash3(i+vec3(0.,0.,1.)),hash3(i+vec3(1.,0.,1.)),f.x),mix(hash3(i+vec3(0.,1.,1.)),hash3(i+vec3(1.,1.,1.)),f.x),f.y),f.z);}
+float fbm(vec3 p){float s=0.,a=.5;for(int i=0;i<4;i++){s+=a*vnoise(p);p=p*2.03+vec3(1.7,9.2,3.1);a*=.5;}return s;}
 mat2 rot(float a){float c=cos(a),s=sin(a);return mat2(c,-s,s,c);}
 void main(){
  float px=2./min(uRes.x,uRes.y);
@@ -31,8 +32,8 @@ void main(){
  float t=uTime*(.55+.6*uLife)+uSeed;
  float len=length(uv);vec2 dir=uv/max(len,1e-4);
  float wk=(uMat==2?.45:1.)*(.35+.9*uLife);
- float w1=noise(vec3(dir*1.3,t*.30))-.5;
- float w2=noise(vec3(dir*3.6,t*1.1+4.))-.5;
+ float w1=vnoise(vec3(dir*1.3,t*.30))-.5;
+ float w2=vnoise(vec3(dir*3.6,t*1.1+4.))-.5;
  float R=.64+.012*sin(t*.8)+wk*(w1*(.05+.10*uAmp)+w2*(.012+.06*uAmp))+uAlert*.018*sin(uTime*7.);
  float d=len-R;
  float inside=1.-smoothstep(-px,px,d);
@@ -41,7 +42,7 @@ void main(){
  float spin=t*(.10+.35*uEnergy);
  vec3 p=n;p.xz=rot(spin)*p.xz;p.yz=rot(.35)*p.yz;
  vec3 L=normalize(vec3(-.45,.55,.7));
- float spec=pow(max(dot(reflect(-L,n),vec3(0,0,1)),0.),36.);
+ float spec=pow(max(dot(reflect(-L,n),vec3(0.,0.,1.)),0.),36.);
  vec3 col=uBase;
  if(uMat==0){
   vec3 w=p*2.1+vec3(0.,0.,t*.22);
@@ -60,7 +61,7 @@ void main(){
   float th=.010+.012*uEnergy;
   float l1=min(th/abs(f2-.5),4.);
   float l2=min(th*.7/abs(f3-.5),4.);
-  float flick=.75+.25*noise(vec3(uTime*14.,uSeed,0.));
+  float flick=.75+.25*vnoise(vec3(uTime*14.,uSeed,0.));
   col=uBase+uMid*.22*smoothstep(.3,.8,f1);
   col+=(uLight*l1*.32+uHot*l2*.22*(.4+uEnergy+uAmp))*flick;
   col+=fres*mix(uMid,uLight,.6)*1.5+spec*.35*uHot;
@@ -69,11 +70,11 @@ void main(){
   float dens=mix(5.,11.,smoothstep(60.,320.,min(uRes.x,uRes.y)));
   vec2 gv=vec2(lon*dens/3.14159,lat*dens*1.25/1.5708);
   vec2 cid=floor(gv),cf=fract(gv);
-  float sp=.6+hash(vec3(cid.x,1.,7.))*1.4;
-  float v=fract(cid.y*.05+t*.22*sp*(1.+1.6*uEnergy)+hash(vec3(cid.x,5.,1.)));
+  float sp=.6+hash3(vec3(cid.x,1.,7.))*1.4;
+  float v=fract(cid.y*.05+t*.22*sp*(1.+1.6*uEnergy)+hash3(vec3(cid.x,5.,1.)));
   float trail=pow(1.-v,3.);float head=smoothstep(.06,0.,v);
   vec2 bc=floor(cf*vec2(3.,4.));
-  float bit=step(.42,hash(vec3(cid*3.1+bc,floor(uTime*3.+hash(vec3(cid,9.))*10.))));
+  float bit=step(.42,hash3(vec3(cid*3.1+bc,floor(uTime*3.+hash3(vec3(cid,9.))*10.))));
   float cm=step(.14,cf.x)*step(cf.x,.86)*step(.1,cf.y)*step(cf.y,.9);
   float g=bit*cm;
   float liquid=fbm(p*2.2+vec3(0.,-t*.15,0.));
@@ -93,8 +94,8 @@ void main(){
   }
   col=uBase*1.1+acc*.62;
   vec3 eg=p*9.+vec3(0.,-t*.6,0.);
-  float em=step(.985,hash(floor(eg)))*smoothstep(.5,0.,length(fract(eg)-.5));
-  col+=em*uHot*(.6+.6*sin(uTime*3.+hash(floor(eg))*20.))*1.4;
+  float em=step(.985,hash3(floor(eg)))*smoothstep(.5,0.,length(fract(eg)-.5));
+  col+=em*uHot*(.6+.6*sin(uTime*3.+hash3(floor(eg))*20.))*1.4;
   col+=fres*uLight*.85+spec*.45;
  }
  col+=smoothstep(-.035,0.,d)*mix(uLight,vec3(1.),.3)*.35;

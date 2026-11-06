@@ -12,6 +12,10 @@ for source in (root / 'static').iterdir():
     elif source.name == 'vendor': shutil.copytree(source, target / source.name, dirs_exist_ok=True)
 for source in (root / 'android/app/src/main/assets/bridge').iterdir():
     if source.is_file(): shutil.copyfile(source, target / source.name)
+import sys
+sys.path.insert(0, str(root / 'scripts'))
+import orb_agsl  # noqa: E402  The native overlay bubble uses the same shader as the web bubble.
+orb_agsl.write(target / 'orb.agsl')
 index = (target / 'index.html').read_text()
 index = index.replace('<script src="/capture.js" defer></script>', '<script src="/capture.js" defer></script>\n  <script src="/android.js" defer></script>\n  <link rel="stylesheet" href="/android.css">')
 (target / 'index.html').write_text(index)

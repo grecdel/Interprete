@@ -30,6 +30,7 @@
       window.InterpreteOrb?.pulse(0.8);
       if (microphone) microphone.onText(event.text,event.audio_ref);
       else if (window.acceptSpeech) window.acceptSpeech(event.text,event.audio_ref);
+    } else if (event.event === 'level') { window.InterpreteOrb?.setLevel(Number(event.value) || 0);
     } else if(event.event === 'storageWarning') { document.getElementById('archive-status').textContent=event.message;
     } else if (event.event === 'audio') {
       const clips=window.InterpreteArchive.session.audio; if(!clips.some(clip=>clip.id===event.clip.id))clips.push(event.clip);

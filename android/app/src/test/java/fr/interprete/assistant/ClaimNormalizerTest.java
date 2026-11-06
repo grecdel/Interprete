@@ -45,6 +45,12 @@ public class ClaimNormalizerTest {
         assertEquals(24, ClaimNormalizer.context(source).length());
         assertEquals(0, ClaimNormalizer.context(Json.array(Json.object("id", "<script>", "claim", "Du texte"))).length());
     }
+    @Test public void voiceLevelFollowsLoudness() {
+        byte[] silence = new byte[3200], loud = new byte[3200];
+        for (int i = 0; i < loud.length; i += 2) { short sample = (short) (i % 4 == 0 ? 16000 : -16000); loud[i] = (byte) sample; loud[i + 1] = (byte) (sample >> 8); }
+        assertEquals(0f, MicrophoneEngine.level(silence, silence.length), 0.001f);
+        assertTrue(MicrophoneEngine.level(loud, loud.length) > .9f);
+    }
     @Test public void waveHeaderMatchesTheAudioActuallyCaptured() {
         byte[] pcm = new byte[]{1, 2, 3, 4}; byte[] wav = MicrophoneEngine.wav(pcm);
         assertEquals(48, wav.length); assertEquals('R', wav[0]); assertEquals('W', wav[8]); assertEquals('d', wav[36]);

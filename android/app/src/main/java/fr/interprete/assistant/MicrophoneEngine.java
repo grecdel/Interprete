@@ -16,13 +16,15 @@ import java.util.concurrent.TimeUnit;
 final class MicrophoneEngine {
     interface Source { void start(); int read(byte[] buffer); void stop(); void release(); }
     interface Factory { Source create(); }
-    interface Listener { void started(); void text(String text); void error(String message); void drained(); default org.json.JSONObject saved(byte[] wav,long start,long duration) throws Exception {return null;} default void text(String value,org.json.JSONObject clip) {text(value);} }
+    interface Listener { void started(); void text(String text); void error(String message); void drained(); default org.json.JSONObject saved(byte[] wav,long start,long duration) throws Exception {return null;} default void text(String value,org.json.JSONObject clip) {text(value);} default void level(float value) {} }
     private final Factory factory;
     private final NativeApi api;
     private final Listener listener;
     private final ThreadPoolExecutor network = new ThreadPoolExecutor(1, 1, 0, TimeUnit.MILLISECONDS, new ArrayBlockingQueue<>(3));
     private final List<Runnable> waiters = new ArrayList<>();
     private volatile boolean recording;
+    private volatile float level; // Voice level 0..1 for the living bubble, from the last buffer read.
+    private long lastLevelEvent;
     private volatile Source source;
     private boolean recorderDone = true;
     private int pending;
@@ -43,6 +45,9 @@ final class MicrophoneEngine {
                     int count = source.read(buffer);
                     if (count <= 0) { if (recording) throw new IllegalStateException("Le micro a interrompu l’enregistrement."); break; }
                     current.write(buffer, 0, count);
+                    level = level(buffer, count);
+                    long clock = android.os.SystemClock.elapsedRealtime();
+                    if (clock - lastLevelEvent >= 100) { lastLevelEvent = clock; listener.level(level); }
                     if(android.os.SystemClock.elapsedRealtime()-startClock>=maxDuration){recording=false;listener.error("Durée maximale atteinte. Le dernier extrait est conservé.");}
                     if (current.size() >= 16000 * 2 * 12) { submit(current.toByteArray()); current.reset(); }
                 }
@@ -62,6 +67,15 @@ final class MicrophoneEngine {
         finishIfDrained();
     }
     boolean isRecording() { return recording; }
+    float level() { return recording ? level : 0f; }
+    /** Loudness of 16-bit little-endian PCM, mapped like the web bubble: -55 dBFS gives 0, -15 dBFS gives 1. */
+    static float level(byte[] pcm, int count) {
+        long sum = 0; int samples = count / 2;
+        for (int i = 0; i + 1 < count; i += 2) { int sample = (short) ((pcm[i] & 0xff) | (pcm[i + 1] << 8)); sum += (long) sample * sample; }
+        if (samples == 0) return 0f;
+        double rms = Math.sqrt(sum / (double) samples) / 32768.0, decibels = 20 * Math.log10(rms + 1e-9);
+        return (float) Math.max(0, Math.min(1, (decibels + 55) / 40));
+    }
     boolean isBusy() { synchronized (this) { return !recorderDone || pending > 0; } }
     private void submit(byte[] pcm) {
         final byte[] audio=wav(pcm);
