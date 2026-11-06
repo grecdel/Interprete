@@ -144,6 +144,8 @@ void main(){
   function forced() { try { return localStorage.getItem('interprete-orb') === 'webgl'; } catch { return false; } }
   const pause = ms => new Promise(resolve => setTimeout(resolve, ms));
   async function setup() {
+    // On Android, ask the app first: creating a context on an emulated GPU can already crash the renderer.
+    try { if (window.InterpreteNative?.emulatedGpu?.() && !forced()) return false; } catch { /* Older bridge: carry on. */ }
     gl = canvas.getContext('webgl', {alpha: true, premultipliedAlpha: true, antialias: false, powerPreference: 'low-power'});
     if (!gl) return false;
     if (softwareRenderer(gl) && !forced()) { gl.getExtension('WEBGL_lose_context')?.loseContext(); gl = null; return false; }

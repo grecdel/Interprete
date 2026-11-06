@@ -140,6 +140,12 @@ public final class MainActivity extends Activity implements InterpreteApp.EventS
         web.evaluateJavascript("window.InterpreteAndroidReceive(" + JSONObject.quote(event.toString()) + ")", null);
     }
     public final class Bridge {
+        /** Emulated GPUs (gfxstream, SwiftShader) can kill the WebView renderer: the page then keeps the CSS bubble. */
+        @JavascriptInterface public boolean emulatedGpu() {
+            String hardware = Build.HARDWARE == null ? "" : Build.HARDWARE.toLowerCase(java.util.Locale.ROOT);
+            String fingerprint = Build.FINGERPRINT == null ? "" : Build.FINGERPRINT;
+            return hardware.contains("ranchu") || hardware.contains("goldfish") || fingerprint.startsWith("generic") || fingerprint.contains("emulator") || fingerprint.contains("sdk_gphone");
+        }
         @JavascriptInterface public void postMessage(String raw) {
             if (raw == null || raw.length() > 16 * 1024 * 1024) return;
             try {
