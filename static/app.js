@@ -340,7 +340,7 @@ if (recognition) {
   };
   recognition.onresult = event => {
     if (!wantedListening) return;
-    restartCount = 0;
+    restartCount = 0; window.InterpreteOrb?.pulse(0.7);
     let interim = '';
     for (let i = event.resultIndex; i < event.results.length; i++) {
       const text = event.results[i][0].transcript.trim();

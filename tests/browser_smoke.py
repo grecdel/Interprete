@@ -4,6 +4,7 @@ Run: python3 -m unittest discover -s tests -p browser_smoke.py -v
 Requires Playwright and Chromium. No API key or paid request is used.
 """
 import json
+import re
 import os
 import tempfile
 import threading
@@ -108,25 +109,35 @@ class BrowserChecks(unittest.TestCase):
         self.assertFalse(self.page.evaluate('document.documentElement.scrollWidth > innerWidth'))
 
     def test_orb_materials_animate_and_respect_reduced_motion(self):
-        colors = set()
+        # 0.7: one WebGL canvas replaces the CSS ribbons and particles, which no longer render.
+        expect(self.page.locator('#companion')).to_have_class(re.compile(r'\borb-gl\b'))
+        canvas = self.page.locator('#bubble .orb-canvas')
+        expect(canvas).to_be_visible()
+        expect(self.page.locator('#bubble .bubble-face')).to_be_hidden()
+        frames = set()
         for theme in ['pastel', 'dark', 'matrix', 'investigation']:
             self.page.locator('.theme-control select').select_option(theme)
-            orb = self.page.locator('#bubble .orb-ribbon').first
-            colors.add(orb.evaluate('el => getComputedStyle(el).borderTopColor'))
-            before = orb.evaluate('el => getComputedStyle(el).transform')
-            self.page.wait_for_timeout(150)
-            self.assertNotEqual(before, orb.evaluate('el => getComputedStyle(el).transform'))
-            self.assertEqual(self.page.locator('#bubble .orb-data').is_visible(), theme == 'matrix')
-            particles = self.page.locator('#bubble .orb-particle')
-            expect(particles).to_have_count(18)
-            before = particles.first.evaluate('el => getComputedStyle(el).transform')
-            self.page.wait_for_timeout(100)
-            self.assertNotEqual(before, particles.first.evaluate('el => getComputedStyle(el).transform'))
-        self.assertEqual(len(colors), 4)
+            self.page.wait_for_timeout(120)
+            first = canvas.screenshot()
+            self.page.wait_for_timeout(250)
+            second = canvas.screenshot()
+            self.assertNotEqual(first, second, theme + ' should move')
+            frames.add(second)
+        self.assertEqual(len(frames), 4)
         self.page.emulate_media(reduced_motion='reduce')
-        for selector in ['.orb-ribbon', '.orb-data', '.orb-particle', '.bubble-aura', '.bubble-face .orb-core']:
-            self.assertEqual(self.page.locator('#bubble ' + selector).first.evaluate(
-                'el => getComputedStyle(el).animationName'), 'none')
+        self.page.wait_for_timeout(200)
+        still = canvas.screenshot()
+        self.page.wait_for_timeout(300)
+        self.assertEqual(still, canvas.screenshot())
+        self.page.emulate_media(reduced_motion='no-preference')
+
+    def test_orb_keeps_css_bubble_without_webgl(self):
+        page = self.browser.new_page()
+        page.add_init_script("HTMLCanvasElement.prototype.getContext = () => null;")
+        page.goto(self.base)
+        expect(page.locator('#bubble .bubble-face')).to_be_visible()
+        self.assertEqual(page.locator('#bubble .orb-canvas').count(), 0)
+        page.close()
 
     def test_orb_welcome_actions_and_panel_position(self):
         self.page.evaluate('localStorage.clear()')

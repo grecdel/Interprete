@@ -260,3 +260,8 @@ body, .android-mode { background:var(--canvas); }
 @keyframes orb-particle-orbit { 0%{transform:rotate(0deg) translateX(42cqw) scale(.5);opacity:.15}25%{opacity:.9}50%{transform:rotate(180deg) translateX(25cqw) scale(1);opacity:.5}75%{opacity:.9}100%{transform:rotate(360deg) translateX(42cqw) scale(.5);opacity:.15} }
 .companion.is-open .archive-tray { top:158px;max-height:calc(100% - 178px); }
 @media(prefers-reduced-motion:reduce){.orb-particle{animation:none!important;transform:rotate(calc(var(--p) * 20deg)) translateX(40cqw);opacity:.35;}}
+
+/* 0.7 · Living bubble (static/orb.js). The canvas overflows the button so the halo and the membrane can breathe. */
+.orb-canvas { display:none; position:absolute; inset:-22%; width:144%; height:144%; pointer-events:none; z-index:0; }
+.orb-gl .orb-canvas { display:block; }
+.orb-gl .bubble-face,.orb-gl .bubble-aura { display:none; }

@@ -27,6 +27,7 @@
       const request = pending.get(event.id); pending.delete(event.id); clearTimeout(request.timer);
       if (event.error) request.reject(new Error(event.error)); else request.resolve(event.result || {});
     } else if (event.event === 'text') {
+      window.InterpreteOrb?.pulse(0.8);
       if (microphone) microphone.onText(event.text,event.audio_ref);
       else if (window.acceptSpeech) window.acceptSpeech(event.text,event.audio_ref);
     } else if(event.event === 'storageWarning') { document.getElementById('archive-status').textContent=event.message;

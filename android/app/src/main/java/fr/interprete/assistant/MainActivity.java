@@ -67,7 +67,7 @@ public final class MainActivity extends Activity implements InterpreteApp.EventS
                 Uri uri = request.getUrl();
                 if (!"https".equals(uri.getScheme()) || !"app.interprete.local".equals(uri.getHost())) return blocked();
                 String filename = uri.getPath(); if (filename == null || filename.equals("/")) filename = "index.html"; else filename = filename.substring(1);
-                if (!java.util.Arrays.asList("index.html", "style.css", "app.js", "archive.js", "capture.js", "workspace.js", "documents.js", "analysis-tools.js", "launcher.js", "android.js", "android.css").contains(filename) && !(filename.startsWith("vendor/") && !filename.contains("..") && filename.matches("[A-Za-z0-9_./-]+"))) return blocked();
+                if (!java.util.Arrays.asList("index.html", "style.css", "app.js", "archive.js", "capture.js", "workspace.js", "documents.js", "analysis-tools.js", "launcher.js", "orb.js", "android.js", "android.css").contains(filename) && !(filename.startsWith("vendor/") && !filename.contains("..") && filename.matches("[A-Za-z0-9_./-]+"))) return blocked();
                 try {
                     String mime = (filename.endsWith(".js") || filename.endsWith(".mjs")) ? "text/javascript" : filename.endsWith(".css") ? "text/css" : filename.endsWith(".wasm") ? "application/wasm" : filename.endsWith(".html") ? "text/html" : "application/octet-stream";
                     Map<String,String> headers = new HashMap<>();
