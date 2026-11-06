@@ -20,6 +20,7 @@ import static org.junit.Assert.*;
 @RunWith(AndroidJUnit4.class)
 public class AndroidSmokeTest {
     private String js(ActivityScenario<MainActivity> scenario, String code) throws Exception {
+        android.util.Log.i("InterpreteTest", "js: " + code.substring(0, Math.min(code.length(), 90)));
         AtomicReference<String> result = new AtomicReference<>(); CountDownLatch complete = new CountDownLatch(1);
         scenario.onActivity(activity -> {
             // The content contains one frame, which contains the WebView.
@@ -33,6 +34,7 @@ public class AndroidSmokeTest {
         until(scenario,condition,20000);
     }
     private void until(ActivityScenario<MainActivity> scenario,String condition,long timeout) throws Exception {
+        android.util.Log.i("InterpreteTest", "until: " + condition.substring(0, Math.min(condition.length(), 90)));
         long end = SystemClock.elapsedRealtime() + timeout;
         while (SystemClock.elapsedRealtime() < end) { if ("true".equals(js(scenario, condition))) return; SystemClock.sleep(200); }
         String state = js(scenario, "JSON.stringify({status:document.getElementById('status').textContent,error:document.getElementById('error-text').textContent,archive:document.getElementById('archive-status').textContent,exportDisabled:document.getElementById('export-html').disabled})");
