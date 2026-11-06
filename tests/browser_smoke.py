@@ -72,6 +72,8 @@ class BrowserChecks(unittest.TestCase):
         self.context.add_init_script(FAKE_MIC)
         # Headless Chromium renders WebGL in software: opt in so the living bubble is exercised.
         self.context.add_init_script("try { localStorage.setItem('interprete-orb', 'webgl'); } catch {}")
+        # The provisional quick follow-up (F4) sends a second request: tested on its own below.
+        self.context.add_init_script("try { if (!sessionStorage.getItem('keep-quick')) localStorage.setItem('interprete-quick', 'off'); } catch {}")
         self.page = self.context.new_page()
         self.errors, self.requests = [], []
         self.page.on('pageerror', lambda error: self.errors.append(str(error)))
@@ -299,6 +301,64 @@ class BrowserChecks(unittest.TestCase):
         self.assertIn('De quelle période et de quel périmètre parlez-vous ?', report)
         self.assertIn('Corrections de la transcription', report)
         self.assertNotIn('<script', report.lower())
+
+    def test_quick_provisional_follow_up_then_full_verification(self):
+        # F4: the provisional card shows first, then gives way to the sourced result.
+        self.page.evaluate("localStorage.setItem('interprete-quick', 'on'); sessionStorage.setItem('keep-quick', '1')")
+        self.page.reload()
+        self.page.locator('#bubble').click()
+        self.page.locator('[data-action=panel]').click()
+        held, bodies = [], []
+        def route(route):
+            body = route.request.post_data_json; bodies.append(body)
+            if body.get('mode') == 'quick':
+                route.fulfill(json={'provisional': True, 'checks': [{'claim': 'Le budget a augmenté de 20 %', 'verdict': 'Piste provisoire',
+                    'provisional': True, 'summary': 'La période reste à vérifier.', 'follow_up': 'Sur quelle période ?', 'sources': []}]})
+            else:
+                held.append(route)
+        self.page.unroute('**/api/verify')
+        self.page.route('**/api/verify', route)
+        self.page.locator('#transcript').fill('Le budget a augmenté de 20 % depuis le début du mandat.')
+        self.page.locator('#verify').click()
+        expect(self.page.locator('.provisional-card')).to_contain_text('Sur quelle période ?')
+        expect(self.page.locator('.provisional-card .verdict')).to_contain_text('rien n’est encore vérifié')
+        self.assertEqual(sorted(body.get('mode', 'full') for body in bodies), ['full', 'quick'])
+        held[0].fulfill(json=fixture())
+        expect(self.page.locator('.result-card')).to_have_count(1)
+        expect(self.page.locator('.provisional-card')).to_have_count(0)
+
+    def test_common_origin_caps_proof_level(self):
+        # F6: two sites that repeat one wire story count as one.
+        result = fixture()
+        result['checks'][0]['sources'].append({'url': 'https://www.lemonde.fr/a', 'title': 'Le Monde'})
+        result['checks'][0]['common_origin'] = 'Les deux reprennent la même dépêche AFP.'
+        self.page.unroute('**/api/verify')
+        self.page.route('**/api/verify', lambda route: route.fulfill(json=result))
+        self.submit('Le budget a augmenté de 20 % depuis le début du mandat.')
+        expect(self.page.locator('.proof-meter').first).to_have_attribute('aria-label', 'Niveau de preuve 1 sur 3 : origine commune probable')
+
+    def test_preparation_context_and_keyword_priority(self):
+        # F3: the preparation travels with searches; a watched keyword skips the 20 s wait.
+        self.page.clock.install()
+        self.page.locator('#tools-button').click()
+        self.page.locator('#preparation summary').click()
+        self.page.locator('#prep-interlocutor').fill('Élu de test')
+        self.page.locator('#prep-topic').fill('Budget 2026')
+        self.page.locator('#prep-keywords').fill('crèches, 20 %')
+        self.page.locator('#prep-expected').fill('Le budget a augmenté de 20 % depuis le début du mandat.')
+        self.page.locator('#prep-run').click()
+        expect(self.page.locator('#preparation [role=status]')).to_contain_text('Propos attendus vérifiés')
+        self.assertEqual(self.requests[-1]['preparation']['sujet'], 'Budget 2026')
+        self.assertEqual(self.requests[-1]['preparation']['interlocuteur'], 'Élu de test')
+        before = len(self.requests)
+        self.page.locator('#tools-button').click()
+        self.page.locator('#bubble').click()
+        self.page.evaluate("testMicrophone.emit('Nous avons ouvert trois cents places en crèches cette année.')")
+        self.page.clock.fast_forward(1500)
+        expect(self.page.locator('.result-card')).to_have_count(2)
+        self.assertEqual(len(self.requests), before + 1)
+        snapshot = self.page.evaluate('InterpreteArchive.snapshot()')
+        self.assertEqual(snapshot['preparation']['mots_cles'], ['crèches', '20 %'])
 
     def test_html_archive_offline_map_and_json_import(self):
         self.submit('Un premier propos de test sur le budget annoncé.')

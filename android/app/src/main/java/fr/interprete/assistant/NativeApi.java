@@ -27,8 +27,20 @@ class NativeApi {
         JSONArray prior = ClaimNormalizer.context(input.optJSONArray("context"));
         JSONObject prompts;
         try (InputStream stream = context.getAssets().open("web/prompts.json")) { prompts = new JSONObject(new String(read(stream, 100000), StandardCharsets.UTF_8)); }
+        JSONObject preparation = ClaimNormalizer.preparation(input.optJSONObject("preparation"));
+        if ("quick".equals(input.optString("mode"))) {
+            // F4: provisional follow-up without web search, before the full verification.
+            if ("url".equals(kind)) return Json.object("checks", new JSONArray(), "provisional", true, "checked_at", java.time.Instant.now().toString());
+            JSONObject quickInput = Json.object("type_contenu", kind, "contenu_a_verifier", text, "propos_anterieurs", new JSONArray());
+            if (preparation.length() > 0) quickInput.put("dossier_preparatoire", preparation);
+            JSONObject quick = Json.object("model", "gpt-4.1-mini", "instructions", prompts.getString("quick_instructions"),
+                    "input", quickInput.toString(), "max_output_tokens", 700, "store", false);
+            return ClaimNormalizer.quick(send("responses", quick.toString().getBytes(StandardCharsets.UTF_8), "application/json", 30000));
+        }
+        JSONObject modelInput = Json.object("type_contenu", kind, "contenu_a_verifier", text, "propos_anterieurs", prior);
+        if (preparation.length() > 0) modelInput.put("dossier_preparatoire", preparation);
         JSONObject payload = Json.object("model", "gpt-4.1-mini", "instructions", prompts.getString("instructions"),
-                "input", Json.object("type_contenu", kind, "contenu_a_verifier", text, "propos_anterieurs", prior).toString(),
+                "input", modelInput.toString(),
                 "tools", Json.array(Json.object("type", "web_search")), "include", Json.array("web_search_call.action.sources"),
                 "tool_choice", "required", "max_output_tokens", 4000, "store", false);
         return ClaimNormalizer.parse(send("responses", payload.toString().getBytes(StandardCharsets.UTF_8), "application/json", 90000), kind, prior);

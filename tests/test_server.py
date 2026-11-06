@@ -161,3 +161,58 @@ class VerificationTests(unittest.TestCase):
 
 if __name__ == '__main__':
     unittest.main()
+
+
+class Version07Tests(unittest.TestCase):
+    """F3 preparation context, F4 quick follow-up, F6 common origin."""
+
+    def test_common_origin_is_reported_only_with_several_sources(self):
+        sources = [{'url': 'https://www.lemonde.fr/a', 'title': 'Le Monde'}, {'url': 'https://www.lefigaro.fr/b', 'title': 'Le Figaro'}]
+        origin = {'detected': True, 'explanation': 'Les deux articles reprennent la même dépêche AFP.'}
+        text = json.dumps({'checks': [{'claim': 'Une affirmation', 'verdict': 'À nuancer', 'common_origin': origin,
+                                       'source_urls': [s['url'] for s in sources]}]})
+        check = structured_checks(text, sources, 'text')[0][0]
+        self.assertEqual(check['common_origin'], 'Les deux articles reprennent la même dépêche AFP.')
+        self.assertTrue(check['limitations'][0].startswith('Origine commune probable'))
+        single = json.dumps({'checks': [{'claim': 'Une affirmation', 'verdict': 'À nuancer', 'common_origin': origin,
+                                         'source_urls': [sources[0]['url']]}]})
+        self.assertNotIn('common_origin', structured_checks(single, sources, 'text')[0][0])
+
+    def test_preparation_is_bounded_and_sent_as_context(self):
+        from server import normalize_preparation
+        value = normalize_preparation({'interlocuteur': 'A' * 500, 'sujet': 'Budget 2026', 'ignored': 'x',
+                                       'pieces': [{'nom': 'Budget.pdf', 'extrait': 'B' * 5000}] * 5})
+        self.assertEqual(len(value['interlocuteur']), 200)
+        self.assertEqual(len(value['pieces']), 3)
+        self.assertEqual(len(value['pieces'][0]['extrait']), 1500)
+        self.assertNotIn('ignored', value)
+        self.assertEqual(normalize_preparation('pas un objet'), {})
+        response = {'status': 'completed', 'output': [{'type': 'message', 'content': [
+            {'type': 'output_text', 'annotations': [], 'text': json.dumps({'checks': []})}]}]}
+        def opener(request, timeout):
+            payload = json.loads(json.loads(request.data)['input'])
+            self.assertEqual(payload['dossier_preparatoire']['sujet'], 'Budget 2026')
+            return io.BytesIO(json.dumps(response).encode())
+        with patch.dict(os.environ, {'OPENAI_API_KEY': 'test-only'}):
+            verify('Le budget a augmenté de 20 %.', opener, preparation={'sujet': 'Budget 2026'})
+
+    def test_quick_follow_up_has_no_search_and_no_verdict(self):
+        from server import verify_quick
+        answer = {'checks': [{'claim': 'Le budget a augmenté de 20 %', 'follow_up': 'Sur quelle période ?', 'why': 'La période.'},
+                             {'claim': 'Sans relance'}, {'claim': 'Trois', 'follow_up': 'Q ?'}, {'claim': 'Quatre', 'follow_up': 'Q ?'}]}
+        response = {'status': 'completed', 'output': [{'type': 'message', 'content': [
+            {'type': 'output_text', 'text': json.dumps(answer)}]}]}
+        def opener(request, timeout):
+            payload = json.loads(request.data)
+            self.assertNotIn('tools', payload)
+            self.assertLessEqual(payload['max_output_tokens'], 700)
+            self.assertEqual(timeout, 30)
+            return io.BytesIO(json.dumps(response).encode())
+        with patch.dict(os.environ, {'OPENAI_API_KEY': 'test-only'}):
+            result = verify_quick('Le budget a augmenté de 20 % depuis 2020.', opener)
+        self.assertTrue(result['provisional'])
+        self.assertEqual(len(result['checks']), 2)
+        self.assertEqual(result['checks'][0]['verdict'], 'Piste provisoire')
+        self.assertEqual(result['checks'][0]['sources'], [])
+        with patch.dict(os.environ, {'OPENAI_API_KEY': 'test-only'}):
+            self.assertEqual(verify_quick('https://www.example.org/article', lambda *a, **k: self.fail('no call'))['checks'], [])

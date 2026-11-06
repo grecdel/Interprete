@@ -19,10 +19,12 @@ orb_agsl.write(target / 'orb.agsl')
 index = (target / 'index.html').read_text()
 index = index.replace('<script src="/capture.js" defer></script>', '<script src="/capture.js" defer></script>\n  <script src="/android.js" defer></script>\n  <link rel="stylesheet" href="/android.css">')
 (target / 'index.html').write_text(index)
+prompts = {}
 for statement in ast.parse((root / 'server.py').read_text()).body:
-    if isinstance(statement, ast.Assign) and any(isinstance(name, ast.Name) and name.id == 'INSTRUCTIONS' for name in statement.targets):
-        instructions = ast.literal_eval(statement.value)
-        (target / 'prompts.json').write_text(json.dumps({'instructions': instructions}, ensure_ascii=False))
-        break
-else: raise RuntimeError('Instructions de vérification introuvables.')
+    if isinstance(statement, ast.Assign):
+        for name in statement.targets:
+            if isinstance(name, ast.Name) and name.id in ('INSTRUCTIONS', 'QUICK_INSTRUCTIONS'):
+                prompts[name.id.lower()] = ast.literal_eval(statement.value)
+if set(prompts) != {'instructions', 'quick_instructions'}: raise RuntimeError('Instructions de vérification introuvables.')
+(target / 'prompts.json').write_text(json.dumps(prompts, ensure_ascii=False))
 print('Ressources Android préparées sans aucune valeur de clé API.')

@@ -17,6 +17,7 @@ let liveTimer;
 let restartTimer;
 let restartCount = 0;
 let lastRequest = 0;
+let priorityLive = false; // F3: set when a watched keyword is heard.
 let entryCount = 0;
 let unreadCount = 0;
 let followUpPreview = ''; // F2: question shown on the closed bubble until the panel opens.
@@ -158,14 +159,16 @@ function proofLevel(check) {
     try { hosts.add(new URL(source.url).hostname.replace(/^www\./, '')); } catch { /* Ignored: not a usable link. */ }
   }
   if (!hosts.size) return 0;
-  if (hosts.size === 1) return 1;
+  // F6: sites that repeat one origin (wire story, press release) are not independent confirmation.
+  if (hosts.size === 1 || check.common_origin) return 1;
   return (check.source_excerpts || []).some(excerpt => excerpt?.published_at) ? 3 : 2;
 }
 const proofLabels = ['aucune source', 'un seul site', 'sources recoupées', 'recoupées et datées'];
-function proofMeter(level) {
+function proofMeter(level, check = {}) {
   const meter = node('span', `proof-meter level-${level}`);
-  meter.title = `Niveau de preuve : ${proofLabels[level]}. Il dépend des sources jointes, pas de l’assurance du modèle.`;
-  meter.setAttribute('aria-label', `Niveau de preuve ${level} sur 3 : ${proofLabels[level]}`);
+  const label = check.common_origin && level === 1 ? 'origine commune probable' : proofLabels[level];
+  meter.title = `Niveau de preuve : ${label}. Il dépend des sources jointes, pas de l’assurance du modèle.`;
+  meter.setAttribute('aria-label', `Niveau de preuve ${level} sur 3 : ${label}`);
   meter.append(node('span', 'proof-label', 'Preuve'));
   for (let notch = 1; notch <= 3; notch++) meter.append(node('i', notch <= level ? 'on' : ''));
   return meter;
@@ -178,7 +181,7 @@ function renderCheck(check) {
   let verdict = check.verdict;
   if (verdict in verdictStyles && !sources) verdict = 'Informations insuffisantes';
   const meta = node('div', 'card-meta');
-  meta.append(node('span', `verdict ${verdictStyles[verdict] || 'unsure'}`, verdict || 'Éclairage'), proofMeter(sources ? proofLevel(check) : 0));
+  meta.append(node('span', `verdict ${verdictStyles[verdict] || 'unsure'}`, verdict || 'Éclairage'), proofMeter(sources ? proofLevel(check) : 0, check));
   card.append(meta);
   card.append(node('h4', '', cleanText(check.claim)), node('p', 'result-summary', cleanText(check.summary)));
   const evidence = Array.isArray(check.evidence) ? check.evidence.filter(item => typeof item === 'string') : [];
@@ -237,6 +240,28 @@ function createEntry(text, kind) {
   ui.feed.prepend(group); ui.feed.scrollTop = 0;
   return {group, pending, excerpt};
 }
+// F2: show the prepared question on the closed bubble.
+function announceFollowUp(checks) {
+  if (companion.classList.contains('is-open')) return;
+  const ready = checks.find(check => typeof check.follow_up === 'string' && check.follow_up.trim());
+  if (!ready) return;
+  followUpPreview = cleanText(ready.follow_up).slice(0, 160); companion.classList.add('has-followup');
+  try { navigator.vibrate?.(40); } catch { /* Vibration is optional. */ }
+  updateStatus();
+}
+// F4: a provisional follow-up, without web search, shown while the full verification runs.
+function quickEnabled() { try { return localStorage.getItem('interprete-quick') !== 'off'; } catch { return true; } }
+function renderProvisional(check) {
+  const card = node('article', 'provisional-card');
+  card.append(node('span', 'verdict provisional', 'Piste provisoire · rien n’est encore vérifié'), node('h4', '', cleanText(check.claim)));
+  if (check.follow_up) {
+    const followUp = node('div', 'follow-up');
+    followUp.append(node('span', 'follow-up-label', 'RELANCE IMMÉDIATE · À CONFIRMER'), node('p', '', cleanText(check.follow_up)));
+    card.append(followUp);
+  }
+  card.append(node('p', 'provisional-note', cleanText(check.summary) || 'Les sources arrivent.'));
+  return card;
+}
 async function runVerification(text, kind, entry = null, transcriptIds = []) {
   if (busy) return false;
   busy = true; updateStatus(); ui.error.hidden = true;
@@ -256,28 +281,40 @@ async function runVerification(text, kind, entry = null, transcriptIds = []) {
   lastRequest = Date.now();
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), 100000);
+  const preparation = window.InterpretePreparation?.payload() || undefined;
+  const requestKind = kind === 'live' ? 'live' : 'auto';
+  let settled = false; const provisional = [];
+  if (quickEnabled() && !/^https?:\/\/\S+$/i.test(text.trim())) {
+    apiFetch('/api/verify', {method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({transcript: text, kind: requestKind, mode: 'quick', preparation})})
+      .then(response => response.ok ? response.json() : null)
+      .then(result => {
+        if (settled || !Array.isArray(result?.checks) || !result.checks.length) return;
+        current.record.provisional_checks = result.checks;
+        for (const check of result.checks) { const card = renderProvisional(check); provisional.push(card); current.group.insertBefore(card, current.pending); }
+        announceFollowUp(result.checks);
+      })
+      .catch(() => { /* The full verification still answers. */ });
+  }
   try {
-    const response = await apiFetch('/api/verify', {method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({transcript: text, kind: kind === 'live' ? 'live' : 'auto', context}), signal: controller.signal});
+    const response = await apiFetch('/api/verify', {method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({transcript: text, kind: requestKind, context, preparation}), signal: controller.signal});
     const result = await response.json();
     if (!response.ok) throw new Error(result.error || 'La recherche a échoué.');
     const checks = archive.completeSubmission(current.record, result);
     current.record.checked_at = result.checked_at;
+    settled = true; for (const card of provisional) card.remove();
     current.pending.remove();
     for (const check of checks) current.group.insertBefore(renderCheck(check), current.excerpt);
     entryCount += checks.length;
     ui['feed-count'].textContent = `${entryCount} éclairage${entryCount > 1 ? 's' : ''}`;
     if (!companion.classList.contains('is-open')) {
       unreadCount += checks.length; ui.unread.textContent = unreadCount; ui.unread.hidden = false;
-      const ready = checks.find(check => typeof check.follow_up === 'string' && check.follow_up.trim());
-      if (ready) {
-        followUpPreview = cleanText(ready.follow_up).slice(0, 160); companion.classList.add('has-followup');
-        try { navigator.vibrate?.(40); } catch { /* Vibration is optional. */ }
-        updateStatus();
-      }
+      announceFollowUp(checks);
     }
     if (kind !== 'live' && ui.transcript.value.trim() === text) { ui.transcript.value = ''; updateComposer(); }
   } catch (error) {
     current.record.status = 'failed'; current.record.error = error.name === 'AbortError' ? 'Délai de recherche dépassé.' : error.message;
+    settled = true;
+    for (const card of provisional) card.querySelector('.provisional-note').textContent = 'La vérification complète a échoué : cette piste reste non vérifiée.';
     current.pending.remove();
     const failure = node('div', 'result-card failed-search');
     failure.append(node('span', 'verdict unsure', 'Recherche interrompue'), node('p', 'result-summary', error.name === 'AbortError' ? 'La recherche prend trop de temps. Réessayez avec un extrait plus court.' : error.message));
@@ -294,17 +331,17 @@ function scheduleLive() {
   clearTimeout(liveTimer);
   if (!wantedListening || busy || configured !== true || pendingSpeech.trim().length < 10) return;
   // Flush after a short pause, or after eight seconds of continuous final results.
-  const pause = Math.min(2500, Math.max(0, 8000 - (Date.now() - pendingSince)));
-  const cooldown = Math.max(0, 20000 - (Date.now() - lastRequest));
+  const pause = priorityLive ? 600 : Math.min(2500, Math.max(0, 8000 - (Date.now() - pendingSince)));
+  const cooldown = priorityLive ? 0 : Math.max(0, 20000 - (Date.now() - lastRequest));
   liveTimer = setTimeout(flushLive, Math.max(pause, cooldown));
-  ui['live-queue'].textContent = cooldown > 2500 ? 'Extrait en attente de la prochaine recherche…' : 'L’extrait sera vérifié après une courte pause.';
+  ui['live-queue'].textContent = priorityLive ? 'Mot-clé repéré : vérification prioritaire.' : cooldown > 2500 ? 'Extrait en attente de la prochaine recherche…' : 'L’extrait sera vérifié après une courte pause.';
 }
 async function flushLive() {
   if (!wantedListening || busy || configured !== true) return;
   const text = pendingSpeech.trim();
   if (text.length < 10) return;
   const transcriptIds = pendingTranscriptIds;
-  pendingSpeech = ''; pendingSince = 0; pendingTranscriptIds = [];
+  pendingSpeech = ''; pendingSince = 0; pendingTranscriptIds = []; priorityLive = false;
   ui['live-queue'].textContent = 'Recherche en cours. L’écoute continue.';
   const accepted = await runVerification(text, 'live', null, transcriptIds);
   if (!accepted) {
@@ -363,6 +400,8 @@ function acceptSpeech(text, audioRef = null) {
   if (!pendingSince) pendingSince = Date.now();
   pendingSpeech = `${pendingSpeech} ${text}`.trim();
   finalPreview = `${finalPreview} ${text}`.trim().slice(-600);
+  // F3: a watched keyword or figure skips the wait between automatic searches.
+  if (window.InterpretePreparation?.matches(text)) priorityLive = true;
 }
 if (recognition) {
   recognition.lang = 'fr-FR'; recognition.continuous = true; recognition.interimResults = true;

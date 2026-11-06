@@ -86,8 +86,15 @@ window.InterpreteArchive = (() => {
   }
   function proofLevel(check) {
     const hosts = new Set((Array.isArray(check.sources) ? check.sources : []).map(source => { try { return new URL(source.url).hostname.replace(/^www\./, ''); } catch { return ''; } }).filter(Boolean));
-    if (!hosts.size) return 0; if (hosts.size === 1) return 1;
+    if (!hosts.size) return 0; if (hosts.size === 1 || check.common_origin) return 1;
     return (check.source_excerpts || []).some(excerpt => excerpt?.published_at) ? 3 : 2;
+  }
+  function preparationSection(preparation) {
+    if (!preparation) return '';
+    const facts = [['Interlocuteur', preparation.interlocuteur], ['Fonction', preparation.fonction], ['Sujet', preparation.sujet], ['Date', preparation.date]].filter(([, item]) => item);
+    const expected = (preparation.propos_attendus || []).map(item => `<li>${escapeHtml(item)}</li>`);
+    if (!facts.length && !expected.length) return '';
+    return `<section><h2>Préparation</h2>${facts.map(([label, item]) => `<p><strong>${label} :</strong> ${escapeHtml(item)}</p>`).join('')}${expected.length ? '<h3>Propos attendus</h3><ul>' + expected.join('') + '</ul>' : ''}</section>`;
   }
   function evidenceDocument(value) {
     const levels = ['aucune source jointe', 'un seul site', 'sources recoupées', 'sources recoupées et datées'];
@@ -98,8 +105,9 @@ window.InterpreteArchive = (() => {
       const sources = (check.sources || []).map(source => { const href = publicLink(source.url); return href ? `<li><a href="${escapeHtml(href)}">${escapeHtml(source.title || href)}</a></li>` : ''; }).filter(Boolean);
       const excerpts = (check.source_excerpts || []).map(excerpt => `<li><blockquote>${escapeHtml(excerpt.quote)}</blockquote><small>${excerpt.published_at ? 'Date indiquée : ' + escapeHtml(excerpt.published_at) + ' · ' : ''}extrait proposé, à relire dans le document original</small></li>`);
       const pieces = (value.evidence || []).filter(piece => piece.claim_id === check.id).map(piece => `<li><strong>${escapeHtml(piece.name)}</strong> · SHA-256 ${escapeHtml(piece.sha256)}${piece.source ? ' · ' + escapeHtml(piece.source) : ''}${piece.notes ? `<br>${escapeHtml(piece.notes)}` : ''}</li>`);
+      const level = proofLevel(check), levelLabel = check.common_origin && level === 1 ? 'origine commune probable' : levels[level];
       return `<section><h2>${index + 1}. ${escapeHtml(check.claim)}</h2>
-<p class="meta"><span class="verdict">${escapeHtml(check.verdict || 'À examiner')}</span> · Niveau de preuve ${proofLevel(check)}/3 : ${levels[proofLevel(check)]} · ${escapeHtml(new Date(entry.at).toLocaleTimeString('fr-FR'))}</p>
+<p class="meta"><span class="verdict">${escapeHtml(check.verdict || 'À examiner')}</span> · Niveau de preuve ${level}/3 : ${levelLabel} · ${escapeHtml(new Date(entry.at).toLocaleTimeString('fr-FR'))}</p>
 <p class="said">Propos d’origine : « ${escapeHtml(entry.text.slice(0, 1200))} »</p>
 <p>${escapeHtml(check.summary)}</p>
 ${check.follow_up ? `<p class="relance"><strong>Relance proposée :</strong> ${escapeHtml(check.follow_up)}</p>` : ''}
@@ -113,6 +121,7 @@ ${pieces.length ? '<h3>Pièces du dossier</h3>' + list(pieces) : ''}
     return `<!doctype html><html lang="fr"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'"><title>Dossier de preuves · Interprète · ${escapeHtml(date)}</title>
 <style>body{font:16px/1.6 -apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;color:#2c2833;background:#fbfaf7;max-width:760px;margin:0 auto;padding:32px 18px}h1{font-size:28px;margin:0 0 6px}h2{font-size:20px;margin:0 0 6px}h3{font-size:13px;letter-spacing:.06em;text-transform:uppercase;color:#6b6475;margin:18px 0 4px}section{border-top:1px solid #e3ddd3;padding:22px 0}.meta{font-size:13px;color:#6b6475}.verdict{font-weight:600;color:#2c2833}.said{color:#4b4553;border-left:3px solid #d8cfe6;padding-left:12px}.relance{background:#f1edf8;padding:10px 12px;border-radius:8px}.warn{color:#8a4b2a}blockquote{margin:0;font-style:italic}small{color:#6b6475}a{color:#4a3fa0}.notice{font-size:13px;color:#6b6475}</style></head><body>
 <h1>Dossier de preuves</h1><p class="notice">Interview du ${escapeHtml(date)} · ${claims.length} propos examiné(s). Analyse automatique : les sources, extraits et relances restent à relire avant publication. Le niveau de preuve dépend des sources jointes, pas de la certitude d’un modèle.</p>
+${preparationSection(value.preparation)}
 ${sections || '<p>Aucun propos vérifié dans cette session.</p>'}
 ${corrections.length ? `<section><h2>Corrections de la transcription</h2>${list(corrections)}</section>` : ''}
 </body></html>`;

@@ -105,6 +105,88 @@
     archiveStatus?.before(review);
   }
 
+  // F3: the interview preparation, behind "+": who, what, expected statements, linked pieces and watched words.
+  if (archive) {
+    const doc = companion.ownerDocument;
+    const make = (tag, text, className) => { const node = doc.createElement(tag); if (text !== undefined) node.textContent = text; if (className) node.className = className; return node; };
+    const field = (label, id, type = 'text', max = 200) => {
+      const wrap = make('label', label, 'prep-field'); const input = make(type === 'textarea' ? 'textarea' : 'input');
+      if (type !== 'textarea') input.type = type; input.id = id; input.maxLength = max; wrap.append(input); return {wrap, input};
+    };
+    const prep = make('details', undefined, 'preparation'); prep.id = 'preparation';
+    prep.append(make('summary', 'Préparer l’interview'));
+    const who = field('Interlocuteur', 'prep-interlocutor'), role = field('Fonction', 'prep-role'), topic = field('Sujet', 'prep-topic', 'text', 400), date = field('Date', 'prep-date', 'date', 40);
+    const expected = field('Propos attendus · un par ligne', 'prep-expected', 'textarea', 6000); expected.input.rows = 3;
+    const keywords = field('Mots et chiffres à surveiller · séparés par des virgules', 'prep-keywords', 'text', 600);
+    const piecesBox = make('fieldset', undefined, 'prep-pieces'); piecesBox.append(make('legend', 'Pièces du dossier jointes aux recherches (3 au plus)'));
+    const note = make('p', 'Ce contexte et le passage annoté des pièces cochées sont envoyés avec chaque recherche. Ils aident à comprendre les propos ; ils ne servent jamais de preuve.', 'muted-note');
+    const run = make('button', 'Vérifier les propos attendus à l’avance'); run.type = 'button'; run.id = 'prep-run';
+    const quickLabel = make('label', undefined, 'prep-quick'); const quick = make('input'); quick.type = 'checkbox'; quick.id = 'prep-quick';
+    try { quick.checked = localStorage.getItem('interprete-quick') !== 'off'; } catch { quick.checked = true; }
+    quickLabel.append(quick, ' Relance rapide provisoire avant les sources (un petit appel en plus)');
+    quick.onchange = () => { try { localStorage.setItem('interprete-quick', quick.checked ? 'on' : 'off'); } catch { /* Session only. */ } };
+    const status = make('p', '', 'muted-note'); status.setAttribute('role', 'status');
+    prep.append(who.wrap, role.wrap, topic.wrap, date.wrap, expected.wrap, keywords.wrap, piecesBox, note, run, status);
+    const inputs = [who.input, role.input, topic.input, date.input, expected.input, keywords.input];
+    let chosen = new Set();
+    function save() {
+      archive.session.preparation = {interlocuteur: who.input.value.trim(), fonction: role.input.value.trim(), sujet: topic.input.value.trim(), date: date.input.value,
+        propos_attendus: expected.input.value.split('\n').map(line => line.trim()).filter(Boolean).slice(0, 20),
+        mots_cles: keywords.input.value.split(',').map(word => word.trim()).filter(Boolean).slice(0, 30), pieces: [...chosen]};
+      try { localStorage.setItem('interprete-preparation', JSON.stringify(archive.session.preparation)); } catch { /* Session only. */ }
+    }
+    try {
+      const saved = JSON.parse(localStorage.getItem('interprete-preparation') || 'null');
+      if (saved && typeof saved === 'object') {
+        who.input.value = saved.interlocuteur || ''; role.input.value = saved.fonction || ''; topic.input.value = saved.sujet || ''; date.input.value = saved.date || '';
+        expected.input.value = (saved.propos_attendus || []).join('\n'); keywords.input.value = (saved.mots_cles || []).join(', ');
+        chosen = new Set(Array.isArray(saved.pieces) ? saved.pieces.slice(0, 3) : []); save();
+      }
+    } catch { /* A damaged draft is ignored. */ }
+    for (const input of inputs) input.addEventListener('input', save);
+    function listPieces() {
+      piecesBox.querySelectorAll('label, p').forEach(item => item.remove());
+      const pieces = archive.session.evidence || [];
+      if (!pieces.length) { piecesBox.append(make('p', 'Importez des pièces dans le dossier d’enquête pour les joindre.', 'muted-note')); return; }
+      for (const piece of pieces) {
+        const label = make('label'); const box = make('input'); box.type = 'checkbox'; box.checked = chosen.has(piece.id);
+        box.onchange = () => {
+          if (box.checked && chosen.size >= 3) { box.checked = false; status.textContent = 'Trois pièces au plus.'; return; }
+          box.checked ? chosen.add(piece.id) : chosen.delete(piece.id); save();
+        };
+        label.append(box, ` ${piece.name}${piece.notes ? '' : ' · sans passage annoté'}`); piecesBox.append(label);
+      }
+    }
+    prep.addEventListener('toggle', () => { if (prep.open) listPieces(); });
+    // Expected statements are checked before the interview, so the follow-up is ready when they are said.
+    run.onclick = async () => {
+      const statements = (archive.session.preparation?.propos_attendus || []).filter(line => line.length >= 10).slice(0, 8);
+      if (!statements.length) { status.textContent = 'Ajoutez au moins un propos attendu de 10 caractères.'; return; }
+      run.disabled = true;
+      for (const [index, statement] of statements.entries()) {
+        status.textContent = `Vérification ${index + 1} sur ${statements.length}…`;
+        if (typeof runVerification === 'function') { while (typeof busy !== 'undefined' && busy) await new Promise(resolve => setTimeout(resolve, 400)); await runVerification(statement, 'text'); }
+      }
+      status.textContent = 'Propos attendus vérifiés : leurs relances sont dans le fil.'; run.disabled = false;
+    };
+    menu.append(prep, quickLabel);
+    const normalize = value => value.toLocaleLowerCase('fr').normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+    window.InterpretePreparation = {
+      payload() {
+        const value = archive.session.preparation; if (!value) return undefined;
+        const pieces = (archive.session.evidence || []).filter(piece => chosen.has(piece.id))
+          .map(piece => ({nom: piece.name, extrait: String(piece.notes || piece.text || '').slice(0, 1500)})).filter(piece => piece.extrait.trim());
+        const result = {interlocuteur: value.interlocuteur, fonction: value.fonction, sujet: value.sujet, date: value.date, pieces};
+        return Object.values(result).some(item => Array.isArray(item) ? item.length : item) ? result : undefined;
+      },
+      matches(text) {
+        const words = archive.session.preparation?.mots_cles || []; if (!words.length) return false;
+        const heard = normalize(text);
+        return words.some(word => word.length >= 2 && heard.includes(normalize(word)));
+      }
+    };
+  }
+
   const hint = find('#composer-hint');
   if (hint && !window.InterpreteNative) hint.textContent = 'Espace : écouter ou mettre en pause · Ctrl+K : vérifier une phrase · Échap : réduire';
 })();
