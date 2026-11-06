@@ -61,6 +61,7 @@ public class AndroidSmokeTest {
             public void stop() { active = false; }
             public void release() { }
         });
+        android.util.Log.i("InterpreteTest", "device: emulatedGpu=" + MainActivity.emulatedGpu() + " hardware=" + android.os.Build.HARDWARE + " product=" + android.os.Build.PRODUCT + " fingerprint=" + android.os.Build.FINGERPRINT);
         try (ActivityScenario<MainActivity> scenario = ActivityScenario.launch(new Intent(app, MainActivity.class).putExtra("listen_on_open", true))) {
             until(scenario,"window.InterpreteLauncher?.ready() && !document.getElementById('companion-launcher').hidden");
             js(scenario,"document.getElementById('launcher-complete').click();true");
