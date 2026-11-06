@@ -52,7 +52,7 @@ final class BloomDrawable extends Drawable {
             case "fire": colors = new int[]{0xffff9a1f, 0xfff0400f, 0xffffeeb0}; base = 0xff8c1208; materialId = 4; break;
             default: colors = new int[]{0xff8ff3ff, 0xff22b8e8, 0xffffffff}; base = 0xff0b4f9c; materialId = 0;
         }
-        runtime = Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU ? loadShader(context) : null;
+        runtime = Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU && !MainActivity.emulatedGpu() ? loadShader(context) : null;
     }
     boolean usesShader() { return runtime != null; }
 

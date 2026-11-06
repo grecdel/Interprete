@@ -73,6 +73,10 @@ public final class MainActivity extends Activity implements InterpreteApp.EventS
                     Map<String,String> headers = new HashMap<>();
                     headers.put("Content-Security-Policy", "default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; worker-src 'self' blob:; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self'; object-src 'none'; frame-src 'none'");
                     headers.put("X-Content-Type-Options", "nosniff");
+                    // Emulated GPUs (gfxstream, SwiftShader) can freeze the whole device on a WebGL shader:
+                    // on an emulator the living bubble is not served and the CSS bubble stays.
+                    if ("orb.js".equals(filename) && emulatedGpu()) return new WebResourceResponse(mime, "UTF-8", 200, "OK", headers,
+                            new java.io.ByteArrayInputStream("/* Emulated GPU: CSS bubble. */".getBytes(java.nio.charset.StandardCharsets.UTF_8)));
                     return new WebResourceResponse(mime, "UTF-8", 200, "OK", headers, getAssets().open("web/" + filename));
                 } catch (Exception ignored) { return blocked(); }
             }
@@ -139,13 +143,16 @@ public final class MainActivity extends Activity implements InterpreteApp.EventS
         if (!ready || isDestroyed()) return;
         web.evaluateJavascript("window.InterpreteAndroidReceive(" + JSONObject.quote(event.toString()) + ")", null);
     }
+    static boolean emulatedGpu() {
+        String hardware = Build.HARDWARE == null ? "" : Build.HARDWARE.toLowerCase(java.util.Locale.ROOT);
+        String product = Build.PRODUCT == null ? "" : Build.PRODUCT.toLowerCase(java.util.Locale.ROOT);
+        String fingerprint = Build.FINGERPRINT == null ? "" : Build.FINGERPRINT;
+        return hardware.contains("ranchu") || hardware.contains("goldfish") || product.contains("sdk_gphone") || product.contains("emulator")
+                || fingerprint.startsWith("generic") || fingerprint.contains("emulator") || fingerprint.contains("sdk_gphone");
+    }
     public final class Bridge {
         /** Emulated GPUs (gfxstream, SwiftShader) can kill the WebView renderer: the page then keeps the CSS bubble. */
-        @JavascriptInterface public boolean emulatedGpu() {
-            String hardware = Build.HARDWARE == null ? "" : Build.HARDWARE.toLowerCase(java.util.Locale.ROOT);
-            String fingerprint = Build.FINGERPRINT == null ? "" : Build.FINGERPRINT;
-            return hardware.contains("ranchu") || hardware.contains("goldfish") || fingerprint.startsWith("generic") || fingerprint.contains("emulator") || fingerprint.contains("sdk_gphone");
-        }
+        @JavascriptInterface public boolean emulatedGpu() { return MainActivity.emulatedGpu(); }
         @JavascriptInterface public void postMessage(String raw) {
             if (raw == null || raw.length() > 16 * 1024 * 1024) return;
             try {
