@@ -243,7 +243,8 @@ window.InterpreteArchive = (() => {
       $('map-search-status').textContent = query ? `${matches.size} élément(s) correspondant à la recherche` : `${nodes.length} éléments · sélectionnez une fiche pour suivre ses liens`;
       const visibleEdges = edges.filter(edge => (!query || matches.has(edge.from) || matches.has(edge.to)) && (!conflictsOnly || edge.kind === 'conflict') && (!selected || edge.from === selected || edge.to === selected));
       const activeIds = new Set(visibleEdges.flatMap(edge => [edge.from, edge.to]));
-      for (const {edge, el} of edgeElements) el.style.opacity = visibleEdges.includes(edge) ? '1' : '.06';
+      const shownEdges = new Set(visibleEdges);
+      for (const {edge, el} of edgeElements) el.style.opacity = shownEdges.has(edge) ? '1' : '.06';
       for (const {item, el} of nodeElements) el.style.opacity = (!selected && !conflictsOnly && (!query || matches.has(item.id))) || activeIds.has(item.id) || item.id === selected ? '1' : '.2';
       $('map-selection').replaceChildren();
       if (selected) {

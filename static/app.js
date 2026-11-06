@@ -67,8 +67,12 @@ function updateStatus() {
 function updateArchiveCount() {
   const count = archive.session.transcript.length;
   ui['archive-count'].textContent = `${count} propos transcrit${count > 1 ? 's' : ''}`;
-  if (count || archive.session.submissions.length) desktop?.setUnsaved(true);
+  if (count || archive.session.submissions.length) markUnsaved(true);
 }
+// In a browser tab the session only lives in memory: warn before closing it (desktop and Android ask natively).
+let sessionUnsaved = false;
+function markUnsaved(value) { sessionUnsaved = value; desktop?.setUnsaved(value); }
+if (!desktop) window.addEventListener('beforeunload', event => { if (sessionUnsaved) { event.preventDefault(); event.returnValue = ''; } });
 async function apiFetch(path, options = {}) {
   if (!desktop) return fetch(path, options);
   const result = await desktop.request(path, options.body ? JSON.parse(options.body) : undefined);
@@ -118,7 +122,7 @@ function updateComposer() {
   updateStatus();
 }
 function cleanText(text) {
-  return String(text || '').replace(/【[^】]*】/g, '').replace(/[^]*/g, '').replace(/\[([^\]]+)\]\(https?:\/\/[^\s)]+\)/g, '$1').replace(/\*\*([^*]+)\*\*/g, '$1').trim();
+  return String(text || '').replace(/\u3010[^\u3011]*\u3011/g, '').replace(/\uE200[^\uE201]*\uE201/g, '').replace(/\[([^\]]+)\]\(https?:\/\/[^\s)]+\)/g, '$1').replace(/\*\*([^*]+)\*\*/g, '$1').trim();
 }
 function sourceList(sources) {
   const list = node('div', 'sources');
@@ -422,7 +426,7 @@ ui['export-html'].onclick = async () => {
   }
   try {
     const saved = await archive.exportHtml();
-    if (saved !== false) { ui['archive-status'].textContent = 'Compte rendu HTML exporté, avec la transcription et la carte. Conservez aussi le JSON pour les comparaisons futures.'; desktop?.setUnsaved(false); }
+    if (saved !== false) { ui['archive-status'].textContent = 'Compte rendu HTML exporté, avec la transcription et la carte. Conservez aussi le JSON pour les comparaisons futures.'; markUnsaved(false); }
     else ui['archive-status'].textContent = 'Enregistrement annulé. La session est toujours disponible.';
   } catch { ui['archive-status'].textContent = 'L’archive n’a pas pu être enregistrée. La session reste disponible.'; }
   finally { endingSession = false; updateStatus(); }

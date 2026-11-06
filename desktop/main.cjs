@@ -157,7 +157,7 @@ async function createWindow() {
     ...bubbleBounds(area), minWidth: 90, minHeight: 90, frame: false, transparent: true,
     backgroundColor: '#00000000', alwaysOnTop: true, resizable: false, show: false,
     title: 'Interprete', icon: path.join(app.getAppPath(), 'docs/assets/icon.png'),
-    webPreferences: {preload: path.join(__dirname, 'preload.cjs'), contextIsolation: true, nodeIntegration: false, sandbox: true, webSecurity: true, backgroundThrottling: false}
+    webPreferences: {preload: path.join(__dirname, 'preload.cjs'), contextIsolation: true, nodeIntegration: false, sandbox: true, webSecurity: true, backgroundThrottling: false, devTools: !app.isPackaged}
   });
   window.webContents.setWindowOpenHandler(({url}) => { const safe = externalUrl(url); if (safe) shell.openExternal(safe); return {action: 'deny'}; });
   window.webContents.on('will-navigate', (event, url) => { if (url !== origin + '/' && !url.startsWith(origin + '/#')) event.preventDefault(); });
@@ -176,6 +176,12 @@ async function createWindow() {
     callback(microphoneAllowed);
   });
   installIpc();
+  // No default menu: its Ctrl+R would reload the page and silently drop the unexported session.
+  Menu.setApplicationMenu(null);
+  window.webContents.on('before-input-event', (event, input) => {
+    const key = String(input.key || '').toLowerCase();
+    if (input.type === 'keyDown' && (key === 'f5' || ((input.control || input.meta) && key === 'r'))) event.preventDefault();
+  });
   window.once('ready-to-show', () => window.show());
   await window.loadURL(origin + '/');
   try {

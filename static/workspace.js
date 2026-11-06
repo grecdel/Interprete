@@ -26,15 +26,22 @@
     transaction.onerror = () => reject(new Error('Stockage local indisponible ou plein.'));
     transaction.onabort = () => reject(new Error('Enregistrement local annulé.'));
   });
-  function manifest() {
+  function manifest(changed = true) {
     archive.session.evidence = [...records.values()].map(({blob, ...record}) => record);
-    window.interpreteDesktop?.setUnsaved(true);
+    if (changed) window.interpreteDesktop?.setUnsaved(true);
   }
   async function save(record) { await tx('readwrite', store => store.put(record)); records.set(record.id, record); manifest(); render(); }
+  // Lower-cased search text, recomputed only when the record object changes (save() replaces it).
+  const indexCache = new WeakMap();
+  function searchIndex(record) {
+    let value = indexCache.get(record);
+    if (value === undefined) { value = `${record.name} ${record.notes || ''} ${record.text || ''}`.toLocaleLowerCase('fr'); indexCache.set(record, value); }
+    return value;
+  }
   function render() {
     list.replaceChildren(); const query = search.value.toLocaleLowerCase('fr');
     for (const record of records.values()) {
-      if (!`${record.name} ${record.notes} ${record.text}`.toLocaleLowerCase('fr').includes(query)) continue;
+      if (query && !searchIndex(record).includes(query)) continue;
       const card = el('article'); card.append(el('h3', record.name), el('p', `${record.size.toLocaleString('fr')} octets · SHA-256 ${record.sha256}`));
       const sourceLabel = el('label', 'Provenance / URL publique'); const source = el('input'); source.value = record.source || ''; sourceLabel.append(source);
       const noteLabel = el('label', 'Notes et passage pertinent'); const notes = el('textarea'); notes.value = record.notes || ''; notes.maxLength = 10000; noteLabel.append(notes);
@@ -139,7 +146,7 @@
   });
   tools.append(toolTitle,el('p','La requête est transmise au fournisseur choisi au clic. Les fichiers du dossier ne sont pas envoyés. Ces notices sont des pistes, pas des preuves validées.'),provider,term,run,results);
   dialog.insertBefore(tools,input);
-  search.oninput = render;
+  let searchTimer; search.oninput = () => { clearTimeout(searchTimer); searchTimer = setTimeout(render, 180); };
   input.onchange = async () => {
     input.disabled = true;
     try {
@@ -190,7 +197,7 @@
       database.onversionchange = () => { database.close(); database = null; input.disabled = true; };
       try {
         for (const record of await tx('readonly', store => store.getAll())) records.set(record.id, record);
-        if (records.size) manifest(); input.disabled = false; render();
+        if (records.size) manifest(false); input.disabled = false; render();
         status.textContent = 'Dossier local prêt. La suppression des données de l’application efface les pièces conservées ici.';
       } catch (error) { status.textContent = error.message; }
     };

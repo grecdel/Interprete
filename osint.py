@@ -70,7 +70,6 @@ def search(provider, query, opener=None):
     if not isinstance(payload,dict): raise ValueError('Réponse documentaire invalide.')
     message=payload.get('message')
     rows = message.get('items', []) if provider == 'crossref' and isinstance(message,dict) else payload.get('data', []) if provider == 'data_gouv' else payload.get('results', [])
-    if not isinstance(payload,dict): raise ValueError('Réponse documentaire invalide.')
     if provider=='europe_pmc': rows=obj(payload.get('resultList')).get('result',[])
     elif provider=='wikidata': rows=payload.get('search',[])
     elif provider=='wayback': rows=[obj(payload.get('archived_snapshots')).get('closest',{})]

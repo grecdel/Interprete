@@ -62,3 +62,22 @@ test('transcription failure is visible and does not hang the export', async () =
   assert.equal(errors.length, 1);
   assert.match(errors[0], /Service indisponible/);
 });
+function androidBridge() {
+  const posted = [];
+  const window = {InterpreteNative: {postMessage: raw => posted.push(JSON.parse(raw))}};
+  const globals = {window, document: {addEventListener() {}}, crypto: require('node:crypto').webcrypto, setTimeout: () => 0, clearTimeout() {}, JSON, Promise, Error, Map, Array, Uint32Array};
+  vm.runInNewContext(fs.readFileSync(path.join(__dirname, '../android/app/src/main/assets/bridge/android.js'), 'utf8'), globals);
+  return {window, posted};
+}
+test('android bridge ignores replies addressed to a previous page', async () => {
+  const before = androidBridge(), after = androidBridge();
+  const pending = after.window.interpreteDesktop.settings();
+  const [previousCall] = (before.window.interpreteDesktop.settings().catch(() => {}), before.posted);
+  const [currentCall] = after.posted;
+  assert.notEqual(previousCall.id, currentCall.id);
+  assert.match(currentCall.id, /^rpc_[a-z0-9]+_1$/);
+  // A reply queued natively for the old page (same counter value) must not resolve the new page's call.
+  after.window.InterpreteAndroidReceive(JSON.stringify({id: previousCall.id, result: {foreign: true}}));
+  after.window.InterpreteAndroidReceive(JSON.stringify({id: currentCall.id, result: {overlayEnabled: false}}));
+  assert.deepEqual(await pending, {overlayEnabled: false});
+});

@@ -59,7 +59,7 @@ public final class MainActivity extends Activity implements InterpreteApp.EventS
         web = new WebView(this); web.setBackgroundColor(Color.rgb(243,241,248));
         WebView.setWebContentsDebuggingEnabled(BuildConfig.DEBUG);
         WebSettings settings = web.getSettings(); settings.setJavaScriptEnabled(true); settings.setDomStorageEnabled(true);
-        settings.setAllowFileAccess(false); settings.setAllowContentAccess(true); settings.setMixedContentMode(WebSettings.MIXED_CONTENT_NEVER_ALLOW);
+        settings.setAllowFileAccess(false); settings.setAllowContentAccess(false); settings.setMixedContentMode(WebSettings.MIXED_CONTENT_NEVER_ALLOW);
         settings.setJavaScriptCanOpenWindowsAutomatically(false); settings.setSupportMultipleWindows(false);
         web.addJavascriptInterface(new Bridge(), "InterpreteNative");
         web.setWebViewClient(new WebViewClient() {

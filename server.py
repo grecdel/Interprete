@@ -394,6 +394,8 @@ class Handler(BaseHTTPRequestHandler):
             self.send_json(502, {'error': f'Service de recherche indisponible (HTTP {error.code}). Vérifiez la clé, le quota et le modèle côté serveur.'})
         except (OSError, TimeoutError):
             self.send_json(502, {'error': 'La recherche a échoué ou dépassé le délai. Réessayez.'})
+        except Exception:  # A malformed upstream answer must still produce a JSON error, never a dropped connection.
+            self.send_json(502, {'error': 'Réponse inattendue du service de recherche. Réessayez.'})
 
     def log_message(self, format, *args):
         pass  # Never log interview text or credentials.
