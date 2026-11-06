@@ -327,7 +327,7 @@ class Handler(BaseHTTPRequestHandler):
                 return self.send_json(403, {'error': 'Accès réservé à l’application Interprete.'})
             return self.send_json(200, {'configured': bool(api_key())})
         name = {'/': 'index.html', '/app.js': 'app.js', '/archive.js': 'archive.js',
-                '/capture.js': 'capture.js', '/workspace.js': 'workspace.js', '/documents.js':'documents.js', '/analysis-tools.js':'analysis-tools.js', '/launcher.js':'launcher.js', '/orb.js': 'orb.js', '/style.css': 'style.css'}.get(self.path)
+                '/capture.js': 'capture.js', '/workspace.js': 'workspace.js', '/documents.js':'documents.js', '/analysis-tools.js':'analysis-tools.js', '/launcher.js':'launcher.js', '/orb.js': 'orb.js', '/panel.js': 'panel.js', '/style.css': 'style.css'}.get(self.path)
         if not name and self.path.startswith('/vendor/'):
             candidate = (ROOT / 'static' / urllib.parse.urlsplit(self.path).path.lstrip('/')).resolve()
             if candidate.is_relative_to((ROOT / 'static' / 'vendor').resolve()) and candidate.is_file():

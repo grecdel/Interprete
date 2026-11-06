@@ -19,6 +19,7 @@ let restartCount = 0;
 let lastRequest = 0;
 let entryCount = 0;
 let unreadCount = 0;
+let followUpPreview = ''; // F2: question shown on the closed bubble until the panel opens.
 let floatingWindow = null;
 let floatingSize = {width: 380, height: 720};
 const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
@@ -50,16 +51,17 @@ function updateStatus() {
   companion.classList.toggle('is-listening', listening);
   companion.classList.toggle('is-busy', busy);
   ui.microphone.setAttribute('aria-pressed', String(wantedListening));
-  ui['listen-title'].textContent = wantedListening ? (listening ? 'À l’écoute du reportage' : 'Ouverture du micro…') : 'Écouter un reportage';
-  ui['listen-subtitle'].textContent = wantedListening ? 'Cliquez pour mettre l’écoute en pause.' : 'Un clic. Les infos se vérifient au fil du direct.';
+  ui['listen-title'].textContent = wantedListening ? (listening ? 'Pause' : 'Ouverture du micro…') : 'Écouter';
+  ui['listen-subtitle'].textContent = wantedListening ? 'Mettre l’écoute en pause. La bulle fait de même.' : 'Écouter un reportage. Touchez aussi la bulle.';
   ui.microphone.querySelector('use').setAttribute('href', wantedListening ? '#i-pause' : '#i-mic');
-  ui.bubble.setAttribute('aria-label', 'Activer Interprète et choisir une action');
-  ui['bubble-label'].textContent = wantedListening ? 'Écoute active · ouvrir les actions' : busy ? 'Vérification en cours…' : 'Un clic pour m’activer';
+  // 0.7: when the panel is open, the bubble is the microphone button.
+  const panelOpen = companion.classList.contains('is-open');
+  ui.bubble.setAttribute('aria-label', panelOpen ? (wantedListening ? 'Mettre l’écoute en pause' : 'Écouter un reportage') : followUpPreview ? `Relance prête : ${followUpPreview}. Ouvrir Interprète` : 'Activer Interprète et choisir une action');
+  ui['bubble-label'].textContent = followUpPreview && !panelOpen ? `Relance prête · ${followUpPreview}` : wantedListening ? 'Écoute active · ouvrir les actions' : busy ? 'Vérification en cours…' : 'Un clic pour m’activer';
   if (!recognition && !desktop) {
     ui['listen-title'].textContent = 'La saisie reste à votre écoute';
     ui['listen-subtitle'].textContent = 'Pour le micro, utilisez Chrome sur ordinateur.';
-    ui.bubble.setAttribute('aria-label', 'Activer Interprète et choisir une action');
-    ui['bubble-label'].textContent = 'Un clic pour ouvrir';
+    if (!panelOpen && !followUpPreview) { ui.bubble.setAttribute('aria-label', 'Activer Interprète et choisir une action'); ui['bubble-label'].textContent = 'Un clic pour ouvrir'; }
   }
   ui.verify.disabled = busy || ui.transcript.value.trim().length < 10;
   ui['export-html'].disabled = busy || endingSession;
@@ -94,11 +96,13 @@ async function refreshConfiguration() {
 
 function setPanelOpen(open) {
   companion.classList.toggle('is-open', open);
+  queueMicrotask(updateStatus);
   ui['assistant-panel'].hidden = !open;
   ui.bubble.setAttribute('aria-expanded', String(open));
   desktop?.setPanelOpen(open);
   if (open) {
     unreadCount = 0; ui.unread.hidden = true;
+    followUpPreview = ''; companion.classList.remove('has-followup');
     if (floatingWindow) {
       try { floatingWindow.resizeTo(floatingSize.width, floatingSize.height); } catch { /* Browser controls window dimensions. */ }
     }
@@ -147,13 +151,35 @@ function sourceList(sources) {
   }
   return list;
 }
+// UI4: evidence level from the sources actually attached, distinct from the verdict and the model's confidence.
+function proofLevel(check) {
+  const hosts = new Set();
+  for (const source of Array.isArray(check.sources) ? check.sources : []) {
+    try { hosts.add(new URL(source.url).hostname.replace(/^www\./, '')); } catch { /* Ignored: not a usable link. */ }
+  }
+  if (!hosts.size) return 0;
+  if (hosts.size === 1) return 1;
+  return (check.source_excerpts || []).some(excerpt => excerpt?.published_at) ? 3 : 2;
+}
+const proofLabels = ['aucune source', 'un seul site', 'sources recoupées', 'recoupées et datées'];
+function proofMeter(level) {
+  const meter = node('span', `proof-meter level-${level}`);
+  meter.title = `Niveau de preuve : ${proofLabels[level]}. Il dépend des sources jointes, pas de l’assurance du modèle.`;
+  meter.setAttribute('aria-label', `Niveau de preuve ${level} sur 3 : ${proofLabels[level]}`);
+  meter.append(node('span', 'proof-label', 'Preuve'));
+  for (let notch = 1; notch <= 3; notch++) meter.append(node('i', notch <= level ? 'on' : ''));
+  return meter;
+}
+window.InterpreteProof = {proofLevel};
 function renderCheck(check) {
   const card = node('article', 'result-card');
   if (check.id) card.id = check.id;
   const sources = sourceList(check.sources);
   let verdict = check.verdict;
   if (verdict in verdictStyles && !sources) verdict = 'Informations insuffisantes';
-  card.append(node('span', `verdict ${verdictStyles[verdict] || 'unsure'}`, verdict || 'Éclairage'));
+  const meta = node('div', 'card-meta');
+  meta.append(node('span', `verdict ${verdictStyles[verdict] || 'unsure'}`, verdict || 'Éclairage'), proofMeter(sources ? proofLevel(check) : 0));
+  card.append(meta);
   card.append(node('h4', '', cleanText(check.claim)), node('p', 'result-summary', cleanText(check.summary)));
   const evidence = Array.isArray(check.evidence) ? check.evidence.filter(item => typeof item === 'string') : [];
   if (check.follow_up) {
@@ -242,6 +268,12 @@ async function runVerification(text, kind, entry = null, transcriptIds = []) {
     ui['feed-count'].textContent = `${entryCount} éclairage${entryCount > 1 ? 's' : ''}`;
     if (!companion.classList.contains('is-open')) {
       unreadCount += checks.length; ui.unread.textContent = unreadCount; ui.unread.hidden = false;
+      const ready = checks.find(check => typeof check.follow_up === 'string' && check.follow_up.trim());
+      if (ready) {
+        followUpPreview = cleanText(ready.follow_up).slice(0, 160); companion.classList.add('has-followup');
+        try { navigator.vibrate?.(40); } catch { /* Vibration is optional. */ }
+        updateStatus();
+      }
     }
     if (kind !== 'live' && ui.transcript.value.trim() === text) { ui.transcript.value = ''; updateComposer(); }
   } catch (error) {

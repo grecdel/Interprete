@@ -11,7 +11,7 @@ from server import Handler, ROOT, structured_checks
 def main():
     if '--self-test' in sys.argv:
         for name in ('index.html', 'app.js', 'archive.js', 'capture.js', 'style.css', 'workspace.js',
-                     'documents.js', 'launcher.js', 'analysis-tools.js', 'orb.js',
+                     'documents.js', 'launcher.js', 'analysis-tools.js', 'orb.js', 'panel.js',
                      'vendor/pdf/pdf.mjs', 'vendor/ocr/tesseract.min.js'):
             if not (ROOT / 'static' / name).is_file():
                 raise RuntimeError('Ressource absente : ' + name)

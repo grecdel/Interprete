@@ -99,6 +99,12 @@ class BrowserChecks(unittest.TestCase):
         expect(self.page.locator('.result-card').last).to_be_visible()
         expect(self.page.locator('.searching')).to_have_count(0)
 
+    def open_dossier(self):
+        # 0.7: the dossier sits behind the composer's "+" tools button.
+        if self.page.locator('#tools-menu').is_hidden():
+            self.page.locator('#tools-button').click()
+        self.page.locator('.workspace-open').click()
+
     def test_sidebar_is_a_quarter_and_mobile_composer_is_visible(self):
         box = self.page.locator('#assistant-panel').bounding_box()
         self.assertEqual(box['width'], 360)
@@ -194,6 +200,7 @@ class BrowserChecks(unittest.TestCase):
         self.page.clock.install()
         self.page.locator('#collapse').click()
         expect(self.page.locator('#assistant-panel')).to_be_hidden()
+        # Closed panel: the bubble still opens the actions.
         self.page.locator('#bubble').click()
         self.page.locator('[data-action=record]').click()
         expect(self.page.locator('#microphone')).to_have_attribute('aria-pressed', 'true')
@@ -209,6 +216,49 @@ class BrowserChecks(unittest.TestCase):
         self.assertEqual(snapshot['submissions'][0]['transcript_ids'], [snapshot['transcript'][0]['id']])
         self.page.locator('#collapse').click()
         expect(self.page.locator('#microphone')).to_have_attribute('aria-pressed', 'false')
+
+    def test_panel_07_bubble_microphone_shortcuts_and_proof_level(self):
+        # UI1: the open panel's bubble is the microphone; UI6: Space and Ctrl+K.
+        microphone = self.page.locator('#microphone')
+        self.page.locator('#bubble').click()
+        expect(microphone).to_have_attribute('aria-pressed', 'true')
+        self.page.evaluate('document.activeElement.blur()')
+        self.page.keyboard.press('Space')
+        expect(microphone).to_have_attribute('aria-pressed', 'false')
+        self.page.keyboard.press('Control+k')
+        expect(self.page.locator('#transcript')).to_be_focused()
+        # UI3: tools behind "+", closed with Escape.
+        expect(self.page.locator('#tools-menu')).to_be_hidden()
+        self.page.locator('#tools-button').click()
+        expect(self.page.locator('#tools-menu .workspace-open')).to_be_visible()
+        self.page.keyboard.press('Escape')
+        expect(self.page.locator('#tools-menu')).to_be_hidden()
+        expect(self.page.locator('#assistant-panel')).to_be_visible()
+        # UI4: one cited site gives level 1 of 3.
+        self.submit('Le budget a augmenté de 20 % depuis le début du mandat.')
+        meter = self.page.locator('.result-card .proof-meter').first
+        expect(meter).to_have_attribute('aria-label', 'Niveau de preuve 1 sur 3 : un seul site')
+        self.assertEqual(self.page.evaluate("""InterpreteProof.proofLevel({sources: [
+            {url: 'https://www.insee.fr/a'}, {url: 'https://ec.europa.eu/b'}],
+            source_excerpts: [{published_at: '2026-01-01'}]})"""), 3)
+
+    def test_followup_preview_on_closed_bubble(self):
+        # F2: a search that ends after the panel was reduced shows its question on the bubble.
+        held = []
+        self.page.unroute('**/api/verify')
+        self.page.route('**/api/verify', lambda route: held.append(route))
+        self.page.locator('#transcript').fill('Le budget a augmenté de 20 % depuis le début du mandat.')
+        self.page.locator('#verify').click()
+        self.page.wait_for_function('document.querySelector(".searching")')
+        self.page.locator('#collapse').click()
+        self.assertEqual(len(held), 1)
+        held[0].fulfill(json=fixture())
+        expect(self.page.locator('#companion')).to_have_class(re.compile(r'\bhas-followup\b'))
+        expect(self.page.locator('#bubble-label')).to_contain_text('Relance prête · De quelle période')
+        expect(self.page.locator('#bubble-label')).to_be_visible()
+        expect(self.page.locator('#bubble')).to_have_attribute('aria-label', re.compile('^Relance prête'))
+        self.page.evaluate('setPanelOpen(true)')
+        expect(self.page.locator('#companion')).not_to_have_class(re.compile(r'\bhas-followup\b'))
 
     def test_html_archive_offline_map_and_json_import(self):
         self.submit('Un premier propos de test sur le budget annoncé.')
@@ -274,8 +324,8 @@ class BrowserChecks(unittest.TestCase):
 
     def test_transcript_export_is_complete_and_html_is_not_executed(self):
         unsafe = 'Un propos de test </script><script>window.INJECTED=true</script>.'
+        # 0.7: with the panel open, the bubble itself starts listening.
         self.page.locator('#bubble').click()
-        self.page.locator('[data-action=record]').click()
         self.page.evaluate('(text) => testMicrophone.emit(text)', unsafe)
         self.page.locator('#microphone').click()
         self.page.locator('#archive-button').click()
@@ -317,8 +367,8 @@ class BrowserChecks(unittest.TestCase):
         self.assertEqual(self.requests, [])
 
     def test_microphone_permission_failure_is_visible_and_stops_listening(self):
+        # 0.7: with the panel open, the bubble itself starts listening.
         self.page.locator('#bubble').click()
-        self.page.locator('[data-action=record]').click()
         self.page.evaluate("testMicrophone.onerror({error: 'not-allowed'})")
         expect(self.page.locator('#error')).to_contain_text('micro n’a pas été autorisé')
         expect(self.page.locator('#microphone')).to_have_attribute('aria-pressed', 'false')
@@ -352,7 +402,7 @@ class BrowserChecks(unittest.TestCase):
 
     def test_local_evidence_is_searchable_deduplicated_and_exported_without_binary(self):
         import hashlib
-        self.page.locator('.workspace-open').click()
+        self.open_dossier()
         expect(self.page.locator('#evidence-files')).to_be_enabled()
         payload = b'Le budget de reference est de 120 millions.'
         self.page.locator('#evidence-files').set_input_files({'name': 'budget.txt', 'mimeType': 'text/plain', 'buffer': payload})
@@ -384,14 +434,14 @@ class BrowserChecks(unittest.TestCase):
         self.page.reload()
         self.page.locator('#bubble').click()
         self.page.locator('[data-action=panel]').click()
-        self.page.locator('.workspace-open').click()
+        self.open_dossier()
         expect(self.page.locator('.evidence-list article')).to_have_count(1)
         expect(self.page.locator('.evidence-list textarea')).to_have_value('Passage à vérifier : 120 millions.')
 
 
     def test_direct_osint_notice_can_be_kept_without_verifying_it(self):
         self.page.route('**/api/osint',lambda route:route.fulfill(json={'provider':'crossref','query':'budget','retrieved_at':'2026-01-01T12:00:00Z','results':[{'title':'Publication de test','url':'https://doi.org/10.1/test','description':'Métadonnées de démonstration','provider':'crossref'}]}))
-        self.page.locator('.workspace-open').click()
+        self.open_dossier()
         expect(self.page.locator('#evidence-files')).to_be_enabled()
         self.page.get_by_role('searchbox',name='Recherche OSINT directe').fill('budget')
         self.page.get_by_role('button',name='Interroger cette source').click()
@@ -412,7 +462,7 @@ class BrowserChecks(unittest.TestCase):
         for index,obj in enumerate(objects,1):
             offsets.append(len(pdf));pdf+=str(index).encode()+b' 0 obj\n'+obj+b'\nendobj\n'
         xref=len(pdf);pdf+=b'xref\n0 6\n0000000000 65535 f \n'+b''.join(f'{offset:010d} 00000 n \n'.encode() for offset in offsets[1:])+b'trailer\n<< /Size 6 /Root 1 0 R >>\nstartxref\n'+str(xref).encode()+b'\n%%EOF'
-        self.page.locator('.workspace-open').click()
+        self.open_dossier()
         expect(self.page.locator('#evidence-files')).to_be_enabled()
         self.page.locator('#evidence-files').set_input_files({'name':'document.pdf','mimeType':'application/pdf','buffer':pdf})
         card=self.page.locator('.evidence-list article').filter(has=self.page.get_by_role('heading',name='document.pdf',exact=True))
@@ -427,6 +477,7 @@ class BrowserChecks(unittest.TestCase):
 
 
     def test_local_reading_tools_do_not_send_interview_content(self):
+        self.page.locator('#tools-button').click()
         self.page.locator('.analysis-tools summary').click()
         self.page.get_by_role('textbox',name='Texte à décrypter').fill('Un effet de base explique la désinflation.')
         self.page.get_by_role('button',name='Expliquer le jargon présent').click()
