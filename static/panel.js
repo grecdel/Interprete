@@ -62,6 +62,49 @@
   }
   companion.addEventListener('keydown', shortcuts, true);
   document.addEventListener('keydown', event => { if (!companion.contains(event.target)) shortcuts(event); });
+  // F5 and F7 in the archive tray: proofread the transcript (with a change log) and export an evidence report.
+  const archive = window.InterpreteArchive, tray = find('#archive-tray'), archiveStatus = find('#archive-status');
+  if (archive && tray) {
+    const doc = companion.ownerDocument;
+    const make = (tag, text, className) => { const node = doc.createElement(tag); if (text !== undefined) node.textContent = text; if (className) node.className = className; return node; };
+    const changed = () => { if (typeof markUnsaved === 'function') markUnsaved(true); };
+    const evidence = make('button', 'Dossier de preuves ↗', 'evidence-export'); evidence.type = 'button'; evidence.id = 'export-evidence';
+    evidence.title = 'Propos, verdicts, niveau de preuve, sources, extraits et limites, à partager avec la rédaction';
+    evidence.onclick = async () => {
+      try { const saved = await archive.exportEvidence(); archiveStatus.textContent = saved === false ? 'Export annulé.' : 'Dossier de preuves exporté : un fichier HTML sans script, lisible par la rédaction.'; }
+      catch { archiveStatus.textContent = 'Le dossier de preuves n’a pas pu être exporté. La session reste disponible.'; }
+    };
+    find('.archive-actions')?.append(evidence);
+
+    const review = make('details', undefined, 'transcript-review'); review.id = 'transcript-review';
+    const summary = make('summary', 'Relire et corriger la transcription'); review.append(summary);
+    const list = make('div', undefined, 'transcript-review-list'); review.append(list);
+    function render() {
+      list.replaceChildren();
+      const fragments = archive.session.transcript;
+      if (!fragments.length) { list.append(make('p', 'Aucun fragment transcrit pour l’instant.', 'muted-note')); return; }
+      for (const fragment of fragments.slice(-50).reverse()) {
+        const row = make('div', undefined, 'transcript-review-row');
+        const time = make('time', new Date(fragment.at).toLocaleTimeString('fr-FR', {hour: '2-digit', minute: '2-digit', second: '2-digit'}));
+        const field = make('textarea'); field.value = fragment.text; field.rows = 2; field.maxLength = 20000;
+        field.setAttribute('aria-label', 'Fragment transcrit à ' + time.textContent);
+        const save = make('button', 'Corriger'); save.type = 'button';
+        save.onclick = () => {
+          try {
+            if (archive.correctTranscript(fragment.id, field.value)) { changed(); archiveStatus.textContent = 'Correction enregistrée dans le journal. Les vérifications déjà faites gardent le texte entendu.'; render(); }
+            else archiveStatus.textContent = 'Aucune modification à enregistrer.';
+          } catch (error) { archiveStatus.textContent = error.message; }
+        };
+        row.append(time, field, save);
+        if (typeof fragment.original_text === 'string') row.append(make('small', `Entendu : « ${fragment.original_text} »`, 'muted-note'));
+        list.append(row);
+      }
+      if (fragments.length > 50) list.append(make('p', 'Seuls les 50 derniers fragments sont modifiables ici.', 'muted-note'));
+    }
+    review.addEventListener('toggle', () => { if (review.open) render(); });
+    archiveStatus?.before(review);
+  }
+
   const hint = find('#composer-hint');
   if (hint && !window.InterpreteNative) hint.textContent = 'Espace : écouter ou mettre en pause · Ctrl+K : vérifier une phrase · Échap : réduire';
 })();

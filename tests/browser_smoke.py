@@ -260,6 +260,34 @@ class BrowserChecks(unittest.TestCase):
         self.page.evaluate('setPanelOpen(true)')
         expect(self.page.locator('#companion')).not_to_have_class(re.compile(r'\bhas-followup\b'))
 
+    def test_transcript_correction_log_and_evidence_report(self):
+        # F5: correct a misheard fragment; F7: export the evidence report.
+        self.page.locator('#bubble').click()
+        self.page.evaluate("testMicrophone.emit('Le budget a augmenté de vingt pour cent selon le maire.')")
+        self.page.locator('#microphone').click()
+        self.submit('Le budget a augmenté de 20 % depuis le début du mandat.')
+        self.page.locator('#archive-button').click()
+        self.page.locator('#transcript-review summary').click()
+        field = self.page.locator('.transcript-review-row textarea').first
+        field.fill('Le budget a augmenté de 20 % selon le maire.')
+        self.page.locator('.transcript-review-row button').first.click()
+        expect(self.page.locator('#archive-status')).to_contain_text('Correction enregistrée')
+        expect(self.page.locator('.transcript-review-row small').first).to_contain_text('vingt pour cent')
+        session = self.page.evaluate('InterpreteArchive.snapshot()')
+        self.assertEqual(len(session['corrections']), 1)
+        self.assertEqual(session['transcript'][0]['original_text'], 'Le budget a augmenté de vingt pour cent selon le maire.')
+        with self.page.expect_download() as download:
+            self.page.locator('#export-evidence').click()
+        self.assertIn('preuves', download.value.suggested_filename)
+        path = Path(self.artifacts.name) / 'preuves.html'
+        download.value.save_as(path)
+        report = path.read_text(encoding='utf-8')
+        self.assertIn('Dossier de preuves', report)
+        self.assertIn('Niveau de preuve 1/3', report)
+        self.assertIn('De quelle période et de quel périmètre parlez-vous ?', report)
+        self.assertIn('Corrections de la transcription', report)
+        self.assertNotIn('<script', report.lower())
+
     def test_html_archive_offline_map_and_json_import(self):
         self.submit('Un premier propos de test sur le budget annoncé.')
         self.submit('Un second propos de test sur le budget annoncé.')
