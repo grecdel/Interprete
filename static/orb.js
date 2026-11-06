@@ -1,7 +1,8 @@
 'use strict';
 // Living bubble: one WebGL canvas and one draw call replace the CSS ribbons and particles.
-// A ball at the centre and the material in orbit around it: water streams, a plasma ball with
-// bolts leaping out, glyph rings, smoke wisps, flame ribbons and embers. Each state has its own
+// A ball at the centre and the material moving around it: water streams and smoke wisps in an
+// organic, differentially rotating flow, a plasma ball with bolts leaping out, glyphs carried by
+// the flow, and a flame unfolding upward from a burning ball. Each state has its own
 // motion: slow at rest, voice-driven while listening, a fast vortex and a scanning ring during
 // analysis, a heartbeat and a shock wave when a follow-up is ready. and the shape follows the assistant's state and the real voice level.
 // Without WebGL, or once the context is lost for good, the CSS bubble stays in place.
@@ -45,12 +46,12 @@ vec4 orbit(vec2 uv,float a,float squash,float tilt,float head,float arc,float wi
 void main(){
  float px=2./min(uRes.x,uRes.y);
  vec2 uv=(gl_FragCoord.xy-.5*uRes)*px;
- float t=uTime*(.55+.6*uLife)+uSeed;
+ float t=uTime*(.32+.38*uLife)+uSeed;
  float r=length(uv);vec2 dir=uv/max(r,1e-4);
  float ang=atan(uv.y,uv.x);
  // State rhythm: rest is slow, listening follows the voice, analysis spins, a follow-up beats.
- float pace=.45+.4*uListen+2.4*uEnergy+.6*uAmp;
- float beat=fract(uTime*.85);
+ float pace=.35+.3*uListen+1.5*uEnergy+.45*uAmp;
+ float beat=fract(uTime*.6);
  float thump=exp(-beat*7.)*uAlert;
  float R=(.33+.012*sin(t*.8)+uAmp*.025)*(1.+.08*thump);
  vec2 q=uv/R;float z=sqrt(max(0.,1.-dot(q,q)));
@@ -113,107 +114,122 @@ void main(){
   ballC+=(uLight*min(bolts,2.)*.55+white*smoothstep(.8,1.6,bolts)*.9+uLight*rim*(.35+scan)+white*rimCore*(.9+scan))*flick*(1.+thump*.8);
   glowC=uMid*exp(-max(r-RE,0.)*10.)*.35*(.6+uEnergy+uAmp+thump)*smoothstep(RE-.12,RE,r);
   ballA=max(ballA,clamp(max(ballC.r,max(ballC.g,ballC.b)),0.,1.));
+ }else if(uMat==4){
+  // Fire: a flame that unfolds upward from a small burning ball at its base, like a fire emoji.
+  float ft=t*.9*pace+t*.35;
+  vec2 cpos=vec2(0.,-.24);float Rf=R*.72;
+  vec2 p=uv-cpos;
+  float n=fbm(vec3(p.x*2.6,p.y*1.7-ft*1.1,ft*.15));
+  float n2=fbm(vec3(p.x*5.5,p.y*3.6-ft*1.8,ft*.3));
+  float rise=smoothstep(-Rf,.95,p.y);
+  float halfW=Rf*(1.75+.3*uAmp)*(1.-rise*.9)+.015;
+  float sway=(n-.5)*.24*rise+sin(ft*.6+p.y*3.)*.035*rise;
+  float side=abs(p.x-sway)/(halfW*(.75+.6*n2));
+  float height=(.72+.18*uAmp+.12*uEnergy)*(.8+.45*n);
+  float top=p.y/height;
+  float tongues=(fbm(vec3(p.x*7.,p.y*2.2-ft*2.2,ft*.4))-.5)*1.1*rise;
+  float I=clamp(1.-side-max(top,0.)*1.05+(n2-.5)*.6+tongues-max(-p.y-Rf*1.3,0.)*5.,0.,1.);
+  I=pow(I,.8);
+  vec3 c=mix(uBase*.75,uBase,smoothstep(.0,.18,I));
+  c=mix(c,uMid,smoothstep(.12,.42,I));
+  c=mix(c,uLight,smoothstep(.4,.7,I));
+  c=mix(c,uHot,smoothstep(.72,.95,I));
+  float fa=smoothstep(.03,.2,I);
+  // The burning ball glows at the base, inside the flame.
+  vec2 cq=p/Rf;float cz=sqrt(max(0.,1.-dot(cq,cq)));
+  float core=smoothstep(Rf+px,Rf-px,length(p));
+  vec2 sxz=rot2(t*.08)*vec2(cq.x,cz);vec3 sp=vec3(sxz.x,cq.y,sxz.y);
+  float heat=clamp(fbm(sp*3.+vec3(0.,0.,t*.3))*.9+fbm(sp*6.-vec3(t*.25))*.45,0.,1.);
+  vec3 bc=mix(uLight,uHot,smoothstep(.4,.8,heat))*(1.+thump*.6);
+  ballC=mix(c*fa,bc,core*(.55+.45*cz));ballA=max(fa,core);
+  ball=core;
+  // Embers drift upward, swaying.
+  for(int i=0;i<6;i++){
+   float fi=float(i);
+   float cyc=uTime*(.18+.08*hash3(vec3(fi,2.,2.)))*(.6+pace)+hash3(vec3(fi,8.,1.));
+   float id=floor(cyc),life=fract(cyc);
+   float x0=(hash3(vec3(fi,id,3.))-.5)*R*1.6;
+   vec2 e=vec2(x0+sin(life*6.+fi)*.04,-.2+life*(.85+.2*hash3(vec3(fi,id,6.))));
+   float spark=smoothstep(.011,.0,length(uv-e))*(1.-life)*smoothstep(.0,.1,life);
+   frontC+=uHot*spark;frontA=max(frontA,spark);
+  }
+  glowC=uMid*exp(-max(length((uv-vec2(0.,.05))*vec2(1.3,.8))-.3,0.)*6.)*.3*(1.+thump);
  }else{
-  // Core ball.
+  // Core ball and an organic flow around it: inner layers turn faster than outer ones
+  // (differential rotation), the streams meander, thin out and break up.
   vec3 n=normalize(vec3(q,z+.001));
   float dif=dot(n,L);
-  float spin=t*.15*pace;
-  vec2 sxz=rot2(spin)*vec2(q.x,z);vec3 sp=vec3(sxz.x,q.y,sxz.y);
+  vec2 sxz=rot2(t*.1*pace)*vec2(q.x,z);vec3 sp=vec3(sxz.x,q.y,sxz.y);
+  float wt=t*pace;
+  float om=.45*pow(R/max(r,.05),1.3);
+  vec2 ru=rot2(wt*om)*(uv-(uMat==3?vec2(0.,.03*sin(t*.3)):vec2(0.)));
+  vec2 warp=vec2(fbm(vec3(ru*1.8,wt*.12)),fbm(vec3(ru*1.8+5.,wt*.12)))-.5;
+  vec2 pr=ru+warp*(uMat==3?.3:.2);
+  float rr=length(pr);vec2 dr=pr/max(rr,1e-4);
+  float f=fbm(vec3(dr*1.25,rr*(uMat==3?3.5:5.5)+wt*.04));
+  float reach=uMat==3?2.6:uMat==2?5.:4.2;
+  float env=smoothstep(R*.9,R*1.06,r)*exp(-max(r-R,0.)*(reach-uAmp*1.2-uEnergy*.8));
+  float breakup=smoothstep(.32,.56,fbm(vec3(dr*2.6,rr*3.-wt*.25)));
+  vec3 fc=vec3(0.);float fa=0.;
   if(uMat==0){
-   float wob=.02*sin(3.*ang+t*1.7)+.014*sin(5.*ang-t*2.3)+uAmp*.03*sin(7.*ang+t*7.);
+   float ball0=ball;
+   float wob=.02*sin(3.*ang+t*1.2)+.014*sin(5.*ang-t*1.6)+uAmp*.03*sin(7.*ang+t*5.);
    ball=smoothstep(R+wob+px,R+wob-px,r);
    vec3 c=mix(uMid,uLight,step(.25,dif));
    c=mix(c,uBase*1.2,step(dif,-.25)*.7);
-   float s=fbm(vec3(q*2.2,t*.5));
+   float s=fbm(vec3(q*2.2,t*.35));
    c=mix(c,mix(uLight,vec3(1.),.6),smoothstep(.02,.0,abs(s-.55))*step(.1,z));
    c=mix(c,vec3(1.),smoothstep(.93,.97,dot(reflect(-L,n),vec3(0.,0.,1.))));
    c=mix(c,mix(uLight,vec3(1.),.4),smoothstep(R-.03,R,r));
    ballC=c;
+   // Water streams: iso-lines of the flow, crisp like a cartoon, a white glint on one side.
+   float lw=.055+.03*uAmp+.02*uEnergy;
+   float across=(f-.5)/lw;
+   float tube=smoothstep(1.,.75,abs(across));
+   fa=tube*env*breakup;
+   fc=mix(uLight,uMid,smoothstep(-.3,1.,across));
+   fc=mix(fc,vec3(1.),smoothstep(.3,.0,abs(across+.45))*.85);
+   fa=smoothstep(.25,.4,fa);
   }else if(uMat==2){
    vec2 sg=vec2(atan(sp.x,sp.z)*2.6,asin(clamp(sp.y,-1.,1.))*3.2);
    vec2 sc=floor(sg),sf=fract(sg);
-   float bit=step(.5,hash3(vec3(sc*2.3+floor(sf*vec2(3.,4.))*.7,floor(uTime*(2.+4.*uEnergy)+hash3(vec3(sc,4.))*9.))))*step(.12,sf.x)*step(sf.x,.88)*step(.1,sf.y)*step(sf.y,.9);
+   float bit=step(.5,hash3(vec3(sc*2.3+floor(sf*vec2(3.,4.))*.7,floor(uTime*(1.2+2.5*uEnergy)+hash3(vec3(sc,4.))*9.))))*step(.12,sf.x)*step(sf.x,.88)*step(.1,sf.y)*step(sf.y,.9);
    ballC=uBase*1.5+uMid*bit*(.35+.65*z)*(.9+uAmp)+uLight*pow(1.-z,3.)*.7;
-  }else if(uMat==3){
-   float sw=fbm(sp*2.2+vec3(0.,0.,t*.2));
-   float sw2=fbm(sp*4.5+sw*2.-vec3(t*.15));
+   // Data streams: glyphs carried along the meandering flow.
+   float lw=.08+.03*uAmp;
+   float tube=smoothstep(1.,.6,abs((f-.5)/lw));
+   float th=atan(dr.y,dr.x);
+   vec2 g=vec2(th*9.549,rr*20.);
+   vec2 cid=floor(g),cf=fract(g);
+   float bitg=step(.45,hash3(vec3(cid,floor(uTime*(1.5+3.*uEnergy)+hash3(vec3(cid,2.))*7.))+vec3(floor(cf*vec2(3.,4.))*.37,0.)));
+   float cell=step(.14,cf.x)*step(cf.x,.86)*step(.1,cf.y)*step(cf.y,.9);
+   float glyph=bitg*cell;
+   float head=smoothstep(.7,.95,vnoise(vec3(cid*.4,uTime*.6)));
+   fa=tube*env*(.35+.65*breakup);
+   fc=(uMid*1.6+mix(uLight,vec3(1.),.5)*head*1.4)*glyph;
+   fa*=glyph;
+  }else{
+   float sw=fbm(sp*2.2+vec3(0.,0.,t*.15));
+   float sw2=fbm(sp*4.5+sw*2.-vec3(t*.1));
    vec3 c=mix(uMid,uBase,smoothstep(.3,.75,sw2));
    float curl=abs(fract(sw2*5.+sw*2.)-.5)*2.;
    c=mix(c,uLight*.9,smoothstep(.12,.0,curl)*.4);
    c=mix(c,uLight,pow(1.-z,2.)*.55);
-   c*=.75+.35*dif;
-   ballC=c;
-  }else{
-   float heat=clamp(fbm(sp*3.+vec3(0.,0.,t*.45))*.9+fbm(sp*6.-vec3(t*.35))*.45+uAmp*.2,0.,1.);
-   vec3 c=mix(uMid,uLight,smoothstep(.3,.7,heat));
-   c=mix(c,uHot,smoothstep(.65,.95,heat));
-   ballC=mix(uBase,c,.55+.45*z)*(1.+thump*.5);
-   glowC=uMid*exp(-max(r-R,0.)*9.)*.5;
+   ballC=c*(.75+.35*dif);
+   // Smoke: soft wisps carried round, curling, fading with distance.
+   float d=fbm(vec3(pr*2.4+warp*2.,wt*.08));
+   float dens=smoothstep(.42,.72,d)*env*(.5+.5*breakup);
+   float cl=abs(fract(d*5.+f*3.)-.5)*2.;
+   fc=mix(uLight,uMid,smoothstep(.3,.8,d));
+   fc=mix(fc,mix(uLight,vec3(1.),.3),smoothstep(.12,.0,cl)*.5);
+   fa=smoothstep(.05,.45,dens)*.9;
   }
   ballA=ball;ballC*=ball;
-  // Streams in orbit around the ball.
-  for(int i=0;i<3;i++){
-   float fi=float(i);
-   float vis=fi<.5?1.:fi<1.5?clamp(.55+uListen*.2+uAmp+uEnergy,0.,1.):clamp(uAmp*1.5+uEnergy*1.2+uAlert*.5,0.,1.);
-   float a=R*(1.32+.2*fi)+uEnergy*.02*sin(t*3.+fi);
-   float squash=.3+.12*fi+.05*sin(t*.2+fi);
-   float tilt=.55-.5*fi+.25*sin(t*.07+fi*2.);
-   float head=t*(.8+.3*fi)*pace+fi*2.1;
-   float arc=1.5+.7*fi+uEnergy*2.2+uAmp*.8;
-   float width=(uMat==3?.07:uMat==4?.045:.03)*(1.-fi*.15)*(.75+.5*uAmp+.25*uEnergy);
-   // Smoke and flame ribbons wave and drift; water stays crisp.
-   float wv=uMat==3?.07:uMat==4?.035:.012;
-   vec2 ouv=uv+(vec2(fbm(vec3(uv*3.,t*.5+fi)),fbm(vec3(uv*3.+7.,t*.5+fi)))-.5)*wv;
-   vec4 o=orbit(ouv,a,squash,tilt,head,arc,width*(uMat==3?1.5:1.),px);
-   vec3 sc;float sa=o.x*vis;
-   if(uMat==0){
-    // Water stream: toon shaded, a white streak along it, the tail breaking into drops.
-    sc=mix(uLight,uMid,smoothstep(-.2,1.,o.w));
-    sc=mix(sc,vec3(1.),smoothstep(.25,0.,abs(o.w+.45))*.85);
-    float drops=step(.45,vnoise(vec3(o.y*22.,fi,t*.5)));
-    sa*=mix(1.,drops,smoothstep(.55,.8,o.y));
-   }else if(uMat==2){
-    // Data ring: glyphs travelling along the orbit, the leading one bright.
-    float g=o.y*arc*14.;
-    float cell=fract(g),cid=floor(g);
-    float row=step(0.,o.w);
-    float bit=step(.42,hash3(vec3(cid,fi+row*3.,floor(uTime*(4.+6.*uEnergy)))+vec3(floor(cell*3.),floor(fract(o.w*.5+.5)*4.),0.)*.31));
-    float lit=bit*step(.15,cell)*step(cell,.85);
-    sc=mix(uMid,mix(uLight,vec3(1.),.6),smoothstep(.12,0.,o.y))*lit*1.4;
-    sa*=max(lit,.15);
-   }else if(uMat==3){
-    // Smoke stream: soft and textured, thinning out as it trails away.
-    float tex=fbm(vec3(o.y*5.-t*.4,o.w*1.5,fi+t*.1));
-    sc=mix(uLight,uMid,smoothstep(.35,.75,tex));
-    sc=mix(sc,uBase,smoothstep(.6,.9,tex)*.6);
-    float curl=abs(fract(tex*5.+o.y*3.)-.5)*2.;
-    sc=mix(sc,mix(uLight,vec3(1.),.3),smoothstep(.12,.0,curl)*.5);
-    sa*=smoothstep(.25,.55,tex+.25*(1.-o.y))*(1.-o.y*.6)*smoothstep(1.,.15,abs(o.w));
-   }else{
-    // Fire stream: a ribbon of flame flickering along the orbit.
-    float fl=fbm(vec3(o.y*7.-t*3.,o.w*1.4,fi+t*.6));
-    float I=clamp((1.-o.y)*.9+fl*.7-abs(o.w)*.8,0.,1.);
-    sc=mix(uBase,uMid,smoothstep(.15,.45,I));
-    sc=mix(sc,uLight,smoothstep(.45,.75,I));
-    sc=mix(sc,uHot,smoothstep(.8,1.,I));
-    sa*=smoothstep(.12,.35,I);
-   }
-   sc*=sa;
-   if(o.z>.5){frontC=frontC+sc*(1.-frontA);frontA=frontA+sa*(1.-frontA);}
-   else{backC=backC+sc*(1.-backA);backA=backA+sa*(1.-backA);}
-  }
-  if(uMat==4){
-   // Embers thrown out of the burning ball.
-   for(int i=0;i<6;i++){
-    float fi=float(i);
-    float cyc=uTime*(.5+.3*hash3(vec3(fi,2.,2.)))*pace+hash3(vec3(fi,8.,1.));
-    float id=floor(cyc),life=fract(cyc);
-    float a=6.2832*hash3(vec3(fi,id,3.));
-    vec2 e=vec2(cos(a),sin(a))*(R+life*(.25+.2*hash3(vec3(fi,id,6.))))+vec2(0.,life*life*.12);
-    float spark=smoothstep(.012,.0,length(uv-e))*(1.-life);
-    frontC+=uHot*spark;frontA=max(frontA,spark);
-   }
-  }
+  // The flow passes in front of the ball on one side and behind it on the other.
+  float front=step(0.,sin(atan(pr.y,pr.x)+wt*.2));
+  fc*=fa;
+  frontC=fc*front;frontA=fa*front;
+  backC=fc*(1.-front);backA=fa*(1.-front);
  }
  // Analysis: a thin scanning ring sweeps round the ball.
  float ringR=R*1.18;
