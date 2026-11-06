@@ -115,7 +115,7 @@
     };
     const prep = make('details', undefined, 'preparation'); prep.id = 'preparation';
     prep.append(make('summary', 'Préparer l’interview'));
-    const who = field('Interlocuteur', 'prep-interlocutor'), role = field('Fonction', 'prep-role'), topic = field('Sujet', 'prep-topic', 'text', 400), date = field('Date', 'prep-date', 'date', 40);
+    const who = field('Interlocuteur', 'prep-interlocutor'), role = field('Fonction', 'prep-role'), topic = field('Sujet', 'prep-topic', 'text', 400), date = field('Date', 'prep-date', 'text', 40);
     const expected = field('Propos attendus · un par ligne', 'prep-expected', 'textarea', 6000); expected.input.rows = 3;
     const keywords = field('Mots et chiffres à surveiller · séparés par des virgules', 'prep-keywords', 'text', 600);
     const piecesBox = make('fieldset', undefined, 'prep-pieces'); piecesBox.append(make('legend', 'Pièces du dossier jointes aux recherches (3 au plus)'));
