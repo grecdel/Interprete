@@ -16,7 +16,7 @@ const token = randomBytes(32).toString('hex');
 const preferencesPath = () => path.join(app.getPath('userData'),'preferences.json');
 function preferences(){try{return JSON.parse(fs.readFileSync(preferencesPath(),'utf8'));}catch{return {};}}
 function savePreferences(value){fs.mkdirSync(app.getPath('userData'),{recursive:true,mode:0o700});fs.writeFileSync(preferencesPath(),JSON.stringify(value),{mode:0o600});}
-function validTheme(theme){if(!['pastel','dark','matrix','investigation'].includes(theme))throw new Error('Thème inconnu.');return theme;}
+function validTheme(theme){if(!['pastel','dark','matrix','investigation','fire'].includes(theme))throw new Error('Thème inconnu.');return theme;}
 const credentialsPath = () => path.join(app.getPath('userData'), 'credentials.bin');
 const workArea = () => screen.getDisplayNearestPoint(screen.getCursorScreenPoint()).workArea;
 function secureStorageAvailable() {

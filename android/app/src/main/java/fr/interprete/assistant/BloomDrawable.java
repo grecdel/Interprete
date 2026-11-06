@@ -46,10 +46,11 @@ final class BloomDrawable extends Drawable {
     BloomDrawable(Context context, String theme, State state) {
         material = theme; this.state = state;
         switch (theme) {
-            case "dark": colors = new int[]{0xffc557ff, 0xff6135fa, 0xffff8bdd}; base = 0xff10041d; materialId = 1; break;
-            case "matrix": colors = new int[]{0xff75ffbc, 0xff16a46e, 0xffd4ff93}; base = 0xff02130b; materialId = 2; break;
-            case "investigation": colors = new int[]{0xffe9dccb, 0xff8f8292, 0xfff8e1cb}; base = 0xff211e28; materialId = 3; break;
-            default: colors = new int[]{0xffa3f4ff, 0xff5198ec, 0xffd9d4ff}; base = 0xff102b48; materialId = 0;
+            case "dark": colors = new int[]{0xffff4fe0, 0xffa326ff, 0xffffd2ff}; base = 0xff14031f; materialId = 1; break;
+            case "matrix": colors = new int[]{0xffb9ffd8, 0xff1fd58a, 0xffeafff3}; base = 0xff020c07; materialId = 2; break;
+            case "investigation": colors = new int[]{0xffece9e4, 0xff9a959a, 0xffffffff}; base = 0xff16151a; materialId = 3; break;
+            case "fire": colors = new int[]{0xffff9a1f, 0xfff0400f, 0xffffeeb0}; base = 0xff8c1208; materialId = 4; break;
+            default: colors = new int[]{0xff8ff3ff, 0xff22b8e8, 0xffffffff}; base = 0xff0b4f9c; materialId = 0;
         }
         runtime = Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU ? loadShader(context) : null;
     }

@@ -1,16 +1,17 @@
 'use strict';
 // Living bubble: one WebGL canvas and one draw call replace the CSS ribbons and particles.
-// The material follows the theme (pastel = water, dark = violet electricity, matrix = data,
-// investigation = smoke) and the shape follows the assistant's state and the real voice level.
+// The material follows the theme (pastel = water splash, dark = plasma ball, matrix = glyph rain,
+// investigation = ink smoke, fire = flames) and the shape follows the assistant's state and the real voice level.
 // Without WebGL, or once the context is lost for good, the CSS bubble stays in place.
 (() => {
   const companion = document.getElementById('companion'), bubble = document.getElementById('bubble');
   if (!companion || !bubble) return;
   const MATERIALS = {
-    pastel: {id: 0, light: '#a3f4ff', mid: '#5198ec', hot: '#d9d4ff', base: '#102b48'},
-    dark: {id: 1, light: '#c557ff', mid: '#6135fa', hot: '#ff8bdd', base: '#10041d'},
-    matrix: {id: 2, light: '#75ffbc', mid: '#16a46e', hot: '#d4ff93', base: '#02130b'},
-    investigation: {id: 3, light: '#e9dccb', mid: '#8f8292', hot: '#f8e1cb', base: '#211e28'}
+    pastel: {id: 0, light: '#8ff3ff', mid: '#22b8e8', hot: '#ffffff', base: '#0b4f9c'},
+    dark: {id: 1, light: '#ff4fe0', mid: '#a326ff', hot: '#ffd2ff', base: '#14031f'},
+    matrix: {id: 2, light: '#b9ffd8', mid: '#1fd58a', hot: '#eafff3', base: '#020c07'},
+    investigation: {id: 3, light: '#ece9e4', mid: '#9a959a', hot: '#ffffff', base: '#16151a'},
+    fire: {id: 4, light: '#ff9a1f', mid: '#f0400f', hot: '#ffeeb0', base: '#8c1208'}
   };
   const LIFE = 0.7; // Vivacity chosen for 0.7: organic, without distracting from the interview.
   const IDLE_FRAME_MS = 1000 / 30; // Rest and breathing states are drawn at 30 images per second.
@@ -25,99 +26,136 @@ float vnoise(vec3 x){vec3 i=floor(x),f=fract(x);f=f*f*(3.-2.*f);
 return mix(mix(mix(hash3(i),hash3(i+vec3(1.,0.,0.)),f.x),mix(hash3(i+vec3(0.,1.,0.)),hash3(i+vec3(1.,1.,0.)),f.x),f.y),
 mix(mix(hash3(i+vec3(0.,0.,1.)),hash3(i+vec3(1.,0.,1.)),f.x),mix(hash3(i+vec3(0.,1.,1.)),hash3(i+vec3(1.,1.,1.)),f.x),f.y),f.z);}
 float fbm(vec3 p){float s=0.,a=.5;for(int i=0;i<4;i++){s+=a*vnoise(p);p=p*2.03+vec3(1.7,9.2,3.1);a*=.5;}return s;}
-mat2 rot(float a){float c=cos(a),s=sin(a);return mat2(c,-s,s,c);}
 void main(){
  float px=2./min(uRes.x,uRes.y);
  vec2 uv=(gl_FragCoord.xy-.5*uRes)*px;
  float t=uTime*(.55+.6*uLife)+uSeed;
- float len=length(uv);vec2 dir=uv/max(len,1e-4);
- float wk=(uMat==2?.45:1.)*(.35+.9*uLife);
- float w1=vnoise(vec3(dir*1.3,t*.30))-.5;
- float w2=vnoise(vec3(dir*3.6,t*1.1+4.))-.5;
- float R=.64+.012*sin(t*.8)+wk*(w1*(.05+.10*uAmp)+w2*(.012+.06*uAmp))+uAlert*.018*sin(uTime*7.);
- float d=len-R;
- float inside=1.-smoothstep(-px,px,d);
- vec2 q=uv/R;float r2=min(dot(q,q),1.);float z=sqrt(1.-r2);vec3 n=vec3(q,z);
- float fres=pow(1.-z,2.2);
- float spin=t*(.10+.35*uEnergy);
- vec3 p=n;p.xz=rot(spin)*p.xz;p.yz=rot(.35)*p.yz;
- vec3 L=normalize(vec3(-.45,.55,.7));
- float spec=pow(max(dot(reflect(-L,n),vec3(0.,0.,1.)),0.),36.);
- vec3 col=uBase;
+ float r=length(uv);vec2 dir=uv/max(r,1e-4);
+ float breath=.012*sin(t*.8);
+ vec3 col=vec3(0.);float alpha=0.;
  if(uMat==0){
-  vec3 w=p*2.1+vec3(0.,0.,t*.22);
-  float a=fbm(w+fbm(w*1.3+t*.18)*1.6);
-  float c=pow(1.-abs(2.*fbm(w*2.2+a*2.+t*.1)-1.),7.);
-  col=mix(uBase,uMid,smoothstep(.2,.75,a));
-  col=mix(col,uLight,smoothstep(.55,.85,a)*.55);
-  col+=c*.55*mix(uLight,vec3(1.),.5);
-  col+=uAmp*.22*sin(length(q)*26.-uTime*9.)*(1.-r2)*uLight;
-  col+=fres*uLight*1.15+spec*.9;
- }else if(uMat==1){
-  vec3 w=p*1.8;
-  float f1=fbm(w+vec3(0.,0.,t*.55));
-  float f2=fbm(w*1.6+vec3(t*.3,0.,-t*.4)+f1*1.4);
-  float f3=fbm(w*2.7-vec3(0.,t*.5,0.)+f2);
-  float th=.010+.012*uEnergy;
-  float l1=min(th/abs(f2-.5),4.);
-  float l2=min(th*.7/abs(f3-.5),4.);
-  float flick=.75+.25*vnoise(vec3(uTime*14.,uSeed,0.));
-  col=uBase+uMid*.22*smoothstep(.3,.8,f1);
-  col+=(uLight*l1*.32+uHot*l2*.22*(.4+uEnergy+uAmp))*flick;
-  col+=fres*mix(uMid,uLight,.6)*1.5+spec*.35*uHot;
- }else if(uMat==2){
-  float lon=atan(p.x,p.z),lat=asin(clamp(p.y,-1.,1.));
-  float dens=mix(5.,11.,smoothstep(60.,320.,min(uRes.x,uRes.y)));
-  vec2 gv=vec2(lon*dens/3.14159,lat*dens*1.25/1.5708);
-  vec2 cid=floor(gv),cf=fract(gv);
-  float sp=.6+hash3(vec3(cid.x,1.,7.))*1.4;
-  float v=fract(cid.y*.05+t*.22*sp*(1.+1.6*uEnergy)+hash3(vec3(cid.x,5.,1.)));
-  float trail=pow(1.-v,3.);float head=smoothstep(.06,0.,v);
-  vec2 bc=floor(cf*vec2(3.,4.));
-  float bit=step(.42,hash3(vec3(cid*3.1+bc,floor(uTime*3.+hash3(vec3(cid,9.))*10.))));
-  float cm=step(.14,cf.x)*step(cf.x,.86)*step(.1,cf.y)*step(cf.y,.9);
-  float g=bit*cm;
-  float liquid=fbm(p*2.2+vec3(0.,-t*.15,0.));
-  col=uBase+uMid*.18*liquid;
-  col+=g*(uMid*trail*1.1+uHot*head*mix(.55,1.6,smoothstep(80.,300.,min(uRes.x,uRes.y))))*(.35+.65*z)*(1.+uAmp*.8);
-  col+=fres*uLight*1.05+spec*.25*uLight;
- }else{
-  vec3 acc=vec3(0.);float al=0.;
+  // Water: a cartoon splash. Crisp body, tongues thrown upward, droplets, white streaks.
+  float n1=vnoise(vec3(dir*2.2,t*.8)),n2=vnoise(vec3(dir*5.,t*1.6+3.));
+  float up=smoothstep(-.3,1.,dir.y);
+  float n3=vnoise(vec3(dir*9.,t*2.2+7.));
+  float body=.4+breath+(n1-.5)*.14+(n2-.5)*.06+up*pow(n2,2.)*smoothstep(.45,.8,n3)*(.42+.5*uAmp+.2*uEnergy)+uAmp*.04-r;
+  float drops=-1.;
   for(int i=0;i<6;i++){
-   float zz=mix(z,-z,(float(i)+.5)/6.);
-   vec3 sp=vec3(q,zz);sp.xz=rot(t*.07)*sp.xz;
-   vec3 wp=sp*1.5+vec3(0.,-t*.16,0.);
-   float dd=fbm(wp+fbm(wp*1.6+t*.08)*1.3);
-   dd=smoothstep(.40,.82,dd)*(1.+uAmp*.6);
-   acc+=dd*(1.-al)*mix(uMid,uLight,dd);
-   al+=dd*.24*(1.-al);
+   float fi=float(i);
+   float life=fract(t*(.16+.03*fi)*(1.+uEnergy)+fi*.37);
+   float side=fi*1.9+sin(fi*3.1)*.6;
+   vec2 c0=vec2(cos(side)*.55,abs(sin(side))*.45+.25)*(.45+life*.75)-vec2(0.,life*life*.5);
+   drops=max(drops,(.055*(1.-life)+.012)-length(uv-c0));
   }
-  col=uBase*1.1+acc*.62;
-  vec3 eg=p*9.+vec3(0.,-t*.6,0.);
-  float em=step(.985,hash3(floor(eg)))*smoothstep(.5,0.,length(fract(eg)-.5));
-  col+=em*uHot*(.6+.6*sin(uTime*3.+hash3(floor(eg))*20.))*1.4;
-  col+=fres*uLight*.85+spec*.45;
+  float field=max(body,drops);
+  float inside=smoothstep(-px*1.2,px*1.2,field);
+  vec3 c=mix(uMid,uLight,smoothstep(-.55,.55,uv.y+(n1-.5)*.3));
+  c=mix(c,uBase,smoothstep(-.05,-.6,uv.y)*.55);
+  float rim=smoothstep(.045,.0,field);
+  c=mix(c,mix(uLight,vec3(1.),.5),rim*.75);
+  float s=fbm(vec3(uv*2.6+vec2(0.,-t*.3),t*.4));
+  float band=smoothstep(.022,.0,abs(s-.56))*step(.05,field)*smoothstep(-.3,.3,uv.y+.1);
+  c=mix(c,vec3(1.),band*.9);
+  c=mix(c,uMid*.85,smoothstep(.02,.0,abs(s-.42))*step(.08,field)*.35);
+  float spot=length((uv-vec2(-.17,.17))*vec2(1.,1.6));
+  c=mix(c,vec3(1.),smoothstep(.07,.05,spot));
+  col=c*inside;alpha=inside;
+ }else if(uMat==1){
+  // Electricity: a plasma ball. Jagged arcs on the rim and across a dark, translucent core.
+  float R=.6+breath+uAmp*.05;
+  float inside=smoothstep(R+.03,R-.1,r);
+  float haze=fbm(vec3(uv*2.4,t*.3));
+  col+=mix(uBase*2.,uMid*.28,haze)*inside*(.3+.7*smoothstep(0.,R,r));
+  alpha+=inside*.75;
+  float bolts=0.;
+  for(int i=0;i<3;i++){
+   float fi=float(i);
+   vec3 p=vec3(uv*(1.5+fi*.8),t*(.9+fi*.35)+fi*7.);
+   float f=fbm(p+fbm(p*1.7)*.9)+(vnoise(p*9.)-.5)*.07;
+   float w=.005+.005*uEnergy+.003*uAmp;
+   float dist=abs(f-.5);
+   bolts+=(smoothstep(w*1.6,0.,dist)*1.4+w*.6/(dist+w))*(.8-fi*.2);
+  }
+  bolts*=inside*smoothstep(.0,.3,r);
+  float jitter=(vnoise(vec3(dir*5.,t*4.))-.5)*.08*(1.+uEnergy+uAmp)+(vnoise(vec3(dir*17.,t*7.))-.5)*.025;
+  float rim=.005/(abs(r-R-jitter)+.005);
+  float flick=.65+.35*vnoise(vec3(uTime*19.,uSeed,1.));
+  vec3 white=mix(uHot,vec3(1.),.65);
+  float rimCore=smoothstep(.012,.0,abs(r-R-jitter));
+  col+=(uLight*min(bolts,2.)*.55+white*smoothstep(.8,1.6,bolts)*.9+uLight*rim*.35+white*rimCore*.9)*flick;
+  col+=uMid*exp(-max(r-R,0.)*10.)*.35*(.6+uEnergy+uAmp)*smoothstep(R-.12,R,r);
+  alpha=max(alpha,clamp(max(col.r,max(col.g,col.b)),0.,1.));
+ }else if(uMat==2){
+  // Data: falling glyph columns inside a soft, slightly bulging disc.
+  vec2 g=uv*(1.+.28*r*r);
+  float cols=floor(mix(8.,20.,smoothstep(60.,360.,min(uRes.x,uRes.y))));
+  vec2 gv=g*cols*.5+vec2(.5,0.);
+  vec2 cid=floor(gv),cf=fract(gv);
+  float speed=.45+hash3(vec3(cid.x,1.,7.))*1.3;
+  float v=fract(cid.y*.04+t*.32*speed*(1.+1.6*uEnergy)+hash3(vec3(cid.x,5.,1.)));
+  float trail=pow(1.-v,2.6),head=smoothstep(.045,0.,v);
+  vec2 bc=floor(cf*vec2(4.,5.));
+  float bit=step(.46,hash3(vec3(cid*3.1+bc*.71,floor(uTime*3.5+hash3(vec3(cid,9.))*20.))));
+  float cell=step(.1,cf.x)*step(cf.x,.9)*step(.06,cf.y)*step(cf.y,.94);
+  float glyph=bit*cell;
+  float mask=smoothstep(.74,.5,r+(vnoise(vec3(dir*3.,t*.5))-.5)*.08);
+  vec3 c=glyph*(uMid*trail*1.25+mix(uLight,vec3(1.),.55)*head*1.7)*(1.+uAmp*.7);
+  col=c*mask+uBase*mask;
+  alpha=clamp(max(max(c.r,max(c.g,c.b))*mask,.55*mask),0.,1.);
+ }else if(uMat==3){
+  // Smoke: ink billows. Overlapping puffs, a dark heart, pale curling edges and swirl lines.
+  float ts=t*(.10+.12*uEnergy);
+  vec2 q=vec2(fbm(vec3(uv*1.2,ts)),fbm(vec3(uv*1.2+5.2,ts+3.)));
+  vec2 w=vec2(fbm(vec3(uv*1.6+q*1.8+vec2(1.7,9.2),ts*1.3)),fbm(vec3(uv*1.6+q*1.8+vec2(8.3,2.8),ts*1.3)));
+  vec2 wv=uv+(w-.5)*.55+(q-.5)*.25;
+  float puffs=0.;
+  for(int i=0;i<7;i++){
+   float fi=float(i);
+   float ang=fi*.9+ts*.8;
+   vec2 c0=(i==0?vec2(0.):vec2(cos(ang)*1.25,sin(ang)*.85)*(.26+.06*sin(ts*2.+fi)))+(q-.5)*.15;
+   float rad=(i==0?.3:.2+.07*hash3(vec3(fi,5.,1.)))+uAmp*.03;
+   puffs+=exp(-dot(wv-c0,wv-c0)/(rad*rad));
+  }
+  float d=fbm(vec3(uv*2.2+w*2.6,ts));
+  float body=puffs+(d-.5)*1.2;
+  float mask=smoothstep(.38,.6,body);
+  float d2=fbm(vec3(wv*2.6+w*3.,ts*1.5));
+  float shade=clamp((body-.6)*.3+(d2-.5)*1.7+.38-uv.y*.3,0.,1.);
+  vec3 c=mix(uLight,uMid,smoothstep(.12,.55,shade));
+  c=mix(c,uBase,smoothstep(.55,.95,shade));
+  float curl=abs(fract(d2*5.+body*.7)-.5)*2.;
+  float lines=smoothstep(.13,.0,curl)*smoothstep(.25,.75,shade);
+  c=mix(c,mix(uLight,vec3(1.),.3),lines*.55);
+  float edgeLight=smoothstep(.6,.45,body)*mask;
+  c=mix(c,uLight*1.05,edgeLight*.6);
+  alpha=mask*(.75+.25*shade);
+  col=c*alpha;
+ }else{
+  // Fire: tongues of flame rising from a dark red heart.
+  vec2 p=uv*1.45+vec2(0.,.42);
+  float rise=t*(.9+.7*uEnergy);
+  float n=fbm(vec3(p.x*2.3,p.y*1.5-rise,t*.25));
+  float n2=fbm(vec3(p.x*5.,p.y*3.4-rise*1.7,t*.5));
+  float w=.5*(1.-smoothstep(-.4,1.1,p.y)*.55);
+  float shape=1.-length(vec2(p.x/max(w,.05),(p.y+.05)*1.05));
+  float tongues=smoothstep(-.1,1.,p.y);
+  float flame=shape+(n-.5)*1.1+(n2-.5)*.5+tongues*(n-.42)*.9+uAmp*.28;
+  float I=clamp(flame*1.55,0.,1.);
+  vec3 c=mix(uBase*.6,uBase,smoothstep(.0,.25,I));
+  c=mix(c,uMid,smoothstep(.18,.5,I));
+  c=mix(c,uLight,smoothstep(.45,.78,I));
+  c=mix(c,uHot,smoothstep(.8,1.,I)*(.6+.4*n2));
+  float heart=smoothstep(.42,.05,length((p-vec2(.06,-.05))*vec2(1.,.8))+(n2-.5)*.3);
+  c=mix(c,mix(uBase,uMid,.3),heart*.85*smoothstep(.45,.9,I));
+  alpha=smoothstep(.02,.3,I);
+  col=c*alpha;
  }
- col+=smoothstep(-.035,0.,d)*mix(uLight,vec3(1.),.3)*.35;
- vec3 alertC=vec3(1.,.62,.38);
+ // A follow-up is ready: a warm, slow pulse around any material.
  float pulse=.5+.5*sin(uTime*6.5);
- col=mix(col,col*.75+alertC*.45,uAlert*.32*pulse);
- float od=max(d,0.);
- float halo=exp(-od*(10.-3.*uEnergy))*(.22+.28*uAmp+.32*uEnergy+.45*uAlert*pulse);
- vec3 hc=mix(mix(uMid,uLight,.45),alertC,uAlert*.65);
- float motes=0.;
- for(int i=0;i<7;i++){
-  float fi=float(i);
-  float a=uTime*(.25+.05*fi)*(1.+uEnergy)+fi*.9;
-  vec3 o=vec3(cos(a)*R*1.16,0.,sin(a)*R*1.16);
-  o.yz=rot(.5+fi*.7)*o.yz;o.xy=rot(fi*1.3)*o.xy;
-  float vis=o.z>0.?1.:(1.-inside);
-  motes+=vis*exp(-dot(uv-o.xy,uv-o.xy)/(.00012+.00008*uLife))*.9;
- }
- motes*=(.3+.7*uLife);
- vec3 outc=col*inside+hc*halo*(1.-inside)+uLight*motes;
- float alpha=clamp(inside+halo*(1.-inside)+motes,0.,1.);
- gl_FragColor=vec4(outc,alpha);
+ vec3 warm=vec3(1.,.62,.38);
+ float halo=exp(-max(r-.55,0.)*7.)*uAlert*pulse*.55*smoothstep(.35,.6,r);
+ col+=warm*halo;alpha=clamp(max(alpha,halo),0.,1.);
+ gl_FragColor=vec4(col,alpha);
 }`;
 
   const canvas = document.createElement('canvas');

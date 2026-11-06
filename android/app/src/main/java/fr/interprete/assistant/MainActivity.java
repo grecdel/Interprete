@@ -176,12 +176,12 @@ public final class MainActivity extends Activity implements InterpreteApp.EventS
                 break;
             case "launcher": app.resolve(id,new JSONObject());break;
             case "onboard":
-                String onboardingTheme=data.optString("theme");if(!java.util.Arrays.asList("pastel","dark","matrix","investigation").contains(onboardingTheme)){app.reject(id,"Thème inconnu.");break;}
+                String onboardingTheme=data.optString("theme");if(!java.util.Arrays.asList("pastel","dark","matrix","investigation","fire").contains(onboardingTheme)){app.reject(id,"Thème inconnu.");break;}
                 getSharedPreferences("preferences",MODE_PRIVATE).edit().putBoolean("onboardingComplete",true).putString("theme",onboardingTheme).apply();app.resolve(id,new JSONObject());break;
             case "theme":
-                String theme=data.optString("theme");if(!java.util.Arrays.asList("pastel","dark","matrix","investigation").contains(theme)){app.reject(id,"Thème inconnu.");break;}
+                String theme=data.optString("theme");if(!java.util.Arrays.asList("pastel","dark","matrix","investigation","fire").contains(theme)){app.reject(id,"Thème inconnu.");break;}
                 getSharedPreferences("preferences",MODE_PRIVATE).edit().putString("theme",theme).apply();
-                int background=Color.parseColor(theme.equals("dark")?"#10131d":theme.equals("matrix")?"#030c08":theme.equals("investigation")?"#e9dfca":"#f3eff9");
+                int background=Color.parseColor(theme.equals("dark")?"#10131d":theme.equals("matrix")?"#030c08":theme.equals("investigation")?"#e9dfca":theme.equals("fire")?"#140c0a":"#f3eff9");
                 web.setBackgroundColor(background);((android.view.View)web.getParent()).setBackgroundColor(background);
                 if(Build.VERSION.SDK_INT>=30&&getWindow().getInsetsController()!=null) {int light=android.view.WindowInsetsController.APPEARANCE_LIGHT_STATUS_BARS|android.view.WindowInsetsController.APPEARANCE_LIGHT_NAVIGATION_BARS;getWindow().getInsetsController().setSystemBarsAppearance(theme.equals("dark")||theme.equals("matrix")?0:light,light);}
                 app.resolve(id,new JSONObject());break;

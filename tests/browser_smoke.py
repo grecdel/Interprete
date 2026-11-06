@@ -125,7 +125,7 @@ class BrowserChecks(unittest.TestCase):
         expect(canvas).to_be_visible()
         expect(self.page.locator('#bubble .bubble-face')).to_be_hidden()
         frames = set()
-        for theme in ['pastel', 'dark', 'matrix', 'investigation']:
+        for theme in ['pastel', 'dark', 'matrix', 'investigation', 'fire']:
             self.page.locator('.theme-control select').select_option(theme)
             self.page.wait_for_timeout(120)
             first = canvas.screenshot()
@@ -133,7 +133,7 @@ class BrowserChecks(unittest.TestCase):
             second = canvas.screenshot()
             self.assertNotEqual(first, second, theme + ' should move')
             frames.add(second)
-        self.assertEqual(len(frames), 4)
+        self.assertEqual(len(frames), 5)
         self.page.emulate_media(reduced_motion='reduce')
         self.page.wait_for_timeout(200)
         still = canvas.screenshot()

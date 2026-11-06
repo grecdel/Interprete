@@ -329,3 +329,17 @@ body, .android-mode { background:var(--canvas); }
 .provisional-card h4 { margin:0; }
 .verdict.provisional { color:#8a6c33; background:#f8f3e7; }
 .provisional-note { margin:0; font-size:12px; color:var(--muted,#737785); }
+
+/* 0.7 · Ambiance « Feu »: embers and flame on a near-black brown, like the dark theme's structure. */
+:root[data-theme=fire] { color-scheme:dark; --surface:#211612; --canvas:#140c0a; --ink:#fcebe0; --muted:#d6ae98; --line:#4c2c21; --accent:#ff8a3d; --bloom-a:#ffb347; --bloom-b:#f0400f; --bloom-c:#8c1208;
+  --orb-light:#ff9a1f; --orb-mid:#f0400f; --orb-hot:#ffeeb0; --orb-base:#2a0805; --orb-speed:7s; background:var(--canvas); }
+[data-theme=fire] .assistant-panel :is(.result-card,.composer,.archive-tray,.configuration,.error-message,input,textarea) { background:var(--surface); color:var(--ink); border-color:var(--line); }
+[data-theme=fire] .assistant-panel :is(p,span,strong,h2,h3,label,a,summary,button) { color:var(--ink); }
+[data-theme=fire] .assistant-panel :is(.listen-button,.input-shell,.empty-symbol,.live-preview,.composer) { background:var(--surface); border-color:var(--line); color:var(--ink); }
+[data-theme=fire] .assistant-panel .listen-button:hover { background:var(--canvas); }
+[data-theme=fire] .orb-ribbon { border-style:solid; filter:drop-shadow(0 0 1px var(--orb-hot)); }
+:root[data-theme=fire] .assistant-panel .verdict { color:#7f748d; }
+:root[data-theme=fire] .assistant-panel .verdict.confirmed { color:#3f7a62; }
+:root[data-theme=fire] .assistant-panel .verdict.contradicted { color:#9d5c56; }
+:root[data-theme=fire] .assistant-panel .verdict.nuanced,:root[data-theme=fire] .assistant-panel .verdict.provisional { color:#8a6c33; }
+:root[data-theme=fire] .assistant-panel .verdict.unsure { color:#6f6884; }

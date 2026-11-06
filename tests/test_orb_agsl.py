@@ -13,7 +13,7 @@ class OrbShaderTests(unittest.TestCase):
     def test_agsl_conversion_is_complete(self):
         code = orb_agsl.to_agsl(orb_agsl.glsl_source())
         self.assertIn('half4 main(float2 fragCoord){', code)
-        self.assertIn('return half4(half3(outc),half(alpha));', code)
+        self.assertRegex(code, r'return half4\(half3\(\w+\),half\(\w+\)\);')
         self.assertNotRegex(code, r'\b(vec[234]|mat2|gl_\w+|precision)\b')
         for uniform in ('uRes', 'uTime', 'uAmp', 'uEnergy', 'uAlert', 'uSeed', 'uLife', 'uMat', 'uLight', 'uMid', 'uHot', 'uBase'):
             self.assertRegex(code, r'uniform [^;]*\b' + uniform + r'\b')

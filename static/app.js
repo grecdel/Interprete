@@ -585,7 +585,7 @@ refreshConfiguration().then(() => { scheduleLive(); });
 
 // Appearance preferences contain no interview data or API credentials.
 (() => {
-  const themes = {pastel: 'Pastel', dark: 'Sombre', matrix: 'Matrix', investigation: 'Enquête'};
+  const themes = {pastel: 'Pastel', dark: 'Sombre', matrix: 'Matrix', investigation: 'Enquête', fire: 'Feu'};
   const label = document.createElement('label'); label.className = 'theme-control';
   label.textContent = 'Ambiance ';
   const select = document.createElement('select'); select.setAttribute('aria-label', 'Thème de l’interface');
@@ -596,7 +596,7 @@ refreshConfiguration().then(() => { scheduleLive(); });
     const theme = Object.hasOwn(themes, value) ? value : 'pastel';
     document.documentElement.dataset.theme = theme; companion.ownerDocument.documentElement.dataset.theme = theme; select.value = theme;
     if(notify)window.interpreteDesktop?.setTheme?.(theme)?.catch(() => {});
-    document.querySelector('meta[name="theme-color"]')?.setAttribute('content', theme === 'pastel' ? '#f3eff9' : theme === 'matrix' ? '#030c08' : '#10131d');
+    document.querySelector('meta[name="theme-color"]')?.setAttribute('content', theme === 'pastel' ? '#f3eff9' : theme === 'matrix' ? '#030c08' : theme === 'fire' ? '#140c0a' : '#10131d');
   }
   let saved = 'pastel'; try { saved = localStorage.getItem('interprete-theme') || saved; } catch {}
   apply(saved, false);
