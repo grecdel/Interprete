@@ -1,7 +1,8 @@
 'use strict';
 // Living bubble: one WebGL canvas and one draw call replace the CSS ribbons and particles.
-// The material follows the theme (pastel = water splash, dark = plasma ball, matrix = glyph rain,
-// investigation = ink smoke, fire = flames) and the shape follows the assistant's state and the real voice level.
+// A ball is the centre of gravity and the material moves around it following its own physics:
+// pastel = water drop and ballistic droplets, dark = plasma ball, matrix = glyph accretion,
+// investigation = smoke atmosphere in differential rotation, fire = burning ball and rising flames and the shape follows the assistant's state and the real voice level.
 // Without WebGL, or once the context is lost for good, the CSS bubble stays in place.
 (() => {
   const companion = document.getElementById('companion'), bubble = document.getElementById('bubble');
@@ -33,122 +34,142 @@ void main(){
  float r=length(uv);vec2 dir=uv/max(r,1e-4);
  float breath=.012*sin(t*.8);
  vec3 col=vec3(0.);float alpha=0.;
+ float ang=atan(uv.y,uv.x);
+ vec3 L=normalize(vec3(-.45,.6,.65));
  if(uMat==0){
-  // Water: a cartoon splash. Crisp body, tongues thrown upward, droplets, white streaks.
-  float n1=vnoise(vec3(dir*2.2,t*.8)),n2=vnoise(vec3(dir*5.,t*1.6+3.));
-  float up=smoothstep(-.3,1.,dir.y);
-  float n3=vnoise(vec3(dir*9.,t*2.2+7.));
-  float body=.4+breath+(n1-.5)*.14+(n2-.5)*.06+up*pow(n2,2.)*smoothstep(.45,.8,n3)*(.42+.5*uAmp+.2*uEnergy)+uAmp*.04-r;
+  // Water: a drop held by surface tension. Its outline oscillates in low modes; droplets are thrown
+  // from the surface and fall back under the ball's gravity (ballistic arcs), merging on impact.
+  float R=.4+breath+uAmp*.03;
+  float wob=.028*sin(3.*ang+t*1.7)+.022*sin(5.*ang-t*2.3)+.012*sin(8.*ang+t*3.1)+.025*(vnoise(vec3(dir*3.,t))-.5)+uAmp*.035*sin(7.*ang+t*7.);
+  float field=R+wob-r;
   float drops=-1.;
-  for(int i=0;i<6;i++){
+  for(int i=0;i<8;i++){
    float fi=float(i);
-   float life=fract(t*(.16+.03*fi)*(1.+uEnergy)+fi*.37);
-   float side=fi*1.9+sin(fi*3.1)*.6;
-   vec2 c0=vec2(cos(side)*.55,abs(sin(side))*.45+.25)*(.45+life*.75)-vec2(0.,life*life*.5);
-   drops=max(drops,(.055*(1.-life)+.012)-length(uv-c0));
+   float cycle=t*(.35+.12*hash3(vec3(fi,3.,1.)))*(1.+.8*uEnergy+.6*uAmp)+hash3(vec3(fi,1.,9.));
+   float ph=fract(cycle),round_=floor(cycle);
+   float a=6.2832*hash3(vec3(fi,round_,4.));
+   vec2 d0=vec2(cos(a),sin(a));
+   float hmax=.12+.12*hash3(vec3(fi,round_,7.))+uAmp*.12;
+   float h=4.*hmax*ph*(1.-ph);
+   float rad=.022+.018*hash3(vec3(fi,2.,2.));
+   vec2 c0=d0*(R+h+rad*.5)+vec2(-d0.y,d0.x)*.08*(ph-.5);
+   float drop=rad-length(uv-c0);
+   drops=max(drops,drop);
+   float k=28.;field=log(exp(k*field)+exp(k*drop))/k;
   }
-  float field=max(body,drops);
   float inside=smoothstep(-px*1.2,px*1.2,field);
-  vec3 c=mix(uMid,uLight,smoothstep(-.55,.55,uv.y+(n1-.5)*.3));
-  c=mix(c,uBase,smoothstep(-.05,-.6,uv.y)*.55);
-  float rim=smoothstep(.045,.0,field);
-  c=mix(c,mix(uLight,vec3(1.),.5),rim*.75);
-  float s=fbm(vec3(uv*2.6+vec2(0.,-t*.3),t*.4));
-  float band=smoothstep(.022,.0,abs(s-.56))*step(.05,field)*smoothstep(-.3,.3,uv.y+.1);
-  c=mix(c,vec3(1.),band*.9);
-  c=mix(c,uMid*.85,smoothstep(.02,.0,abs(s-.42))*step(.08,field)*.35);
-  float spot=length((uv-vec2(-.17,.17))*vec2(1.,1.6));
-  c=mix(c,vec3(1.),smoothstep(.07,.05,spot));
+  vec2 q=uv/R;float z=sqrt(max(0.,1.-dot(q,q)));vec3 n=normalize(vec3(q,z+.001));
+  float dif=dot(n,L);
+  vec3 c=mix(uMid,uLight,step(.25,dif));
+  c=mix(c,uBase*1.2,step(dif,-.25)*.7);
+  float s=fbm(vec3(q*2.2,t*.5));
+  c=mix(c,mix(uLight,vec3(1.),.6),smoothstep(.02,.0,abs(s-.55))*step(.1,z));
+  c=mix(c,vec3(1.),smoothstep(.93,.97,dot(reflect(-L,n),vec3(0.,0.,1.))));
+  c=mix(c,mix(uLight,vec3(1.),.4),smoothstep(.035,.0,field)*.8);
+  c=mix(c,uLight,step(R*1.02,r)*.6);
   col=c*inside;alpha=inside;
  }else if(uMat==1){
-  // Electricity: a plasma ball. Jagged arcs on the rim and across a dark, translucent core.
-  float R=.6+breath+uAmp*.05;
+  // Electricity: a plasma ball. Arcs crawl across a dark core, the rim crackles,
+  // and from time to time a discharge escapes outward.
+  float R=.52+breath+uAmp*.04;
   float inside=smoothstep(R+.03,R-.1,r);
   float haze=fbm(vec3(uv*2.4,t*.3));
   col+=mix(uBase*2.,uMid*.28,haze)*inside*(.3+.7*smoothstep(0.,R,r));
   alpha+=inside*.75;
-  float bolts=0.;
+  float bolts=0.,escape=0.;
   for(int i=0;i<3;i++){
    float fi=float(i);
    vec3 p=vec3(uv*(1.5+fi*.8),t*(.9+fi*.35)+fi*7.);
    float f=fbm(p+fbm(p*1.7)*.9)+(vnoise(p*9.)-.5)*.07;
    float w=.005+.005*uEnergy+.003*uAmp;
    float dist=abs(f-.5);
-   bolts+=(smoothstep(w*1.6,0.,dist)*1.4+w*.6/(dist+w))*(.8-fi*.2);
+   float line=(smoothstep(w*1.6,0.,dist)*1.4+w*.6/(dist+w))*(.8-fi*.2);
+   bolts+=line;escape+=line;
   }
   bolts*=inside*smoothstep(.0,.3,r);
+  float gate=smoothstep(.62-.2*uEnergy-.15*uAmp,.8,vnoise(vec3(dir*2.5,t*1.6)));
+  escape*=gate*smoothstep(R-.02,R+.02,r)*exp(-max(r-R,0.)*9.);
   float jitter=(vnoise(vec3(dir*5.,t*4.))-.5)*.08*(1.+uEnergy+uAmp)+(vnoise(vec3(dir*17.,t*7.))-.5)*.025;
   float rim=.005/(abs(r-R-jitter)+.005);
   float flick=.65+.35*vnoise(vec3(uTime*19.,uSeed,1.));
   vec3 white=mix(uHot,vec3(1.),.65);
   float rimCore=smoothstep(.012,.0,abs(r-R-jitter));
+  bolts+=escape;
   col+=(uLight*min(bolts,2.)*.55+white*smoothstep(.8,1.6,bolts)*.9+uLight*rim*.35+white*rimCore*.9)*flick;
   col+=uMid*exp(-max(r-R,0.)*10.)*.35*(.6+uEnergy+uAmp)*smoothstep(R-.12,R,r);
   alpha=max(alpha,clamp(max(col.r,max(col.g,col.b)),0.,1.));
  }else if(uMat==2){
-  // Data: falling glyph columns inside a soft, slightly bulging disc.
-  vec2 g=uv*(1.+.28*r*r);
-  float cols=floor(mix(8.,20.,smoothstep(60.,360.,min(uRes.x,uRes.y))));
-  vec2 gv=g*cols*.5+vec2(.5,0.);
-  vec2 cid=floor(gv),cf=fract(gv);
-  float speed=.45+hash3(vec3(cid.x,1.,7.))*1.3;
-  float v=fract(cid.y*.04+t*.32*speed*(1.+1.6*uEnergy)+hash3(vec3(cid.x,5.,1.)));
-  float trail=pow(1.-v,2.6),head=smoothstep(.045,0.,v);
-  vec2 bc=floor(cf*vec2(4.,5.));
-  float bit=step(.46,hash3(vec3(cid*3.1+bc*.71,floor(uTime*3.5+hash3(vec3(cid,9.))*20.))));
-  float cell=step(.1,cf.x)*step(cf.x,.9)*step(.06,cf.y)*step(cf.y,.94);
-  float glyph=bit*cell;
-  float mask=smoothstep(.74,.5,r+(vnoise(vec3(dir*3.,t*.5))-.5)*.08);
-  vec3 c=glyph*(uMid*trail*1.25+mix(uLight,vec3(1.),.55)*head*1.7)*(1.+uAmp*.7);
-  col=c*mask+uBase*mask;
-  alpha=clamp(max(max(c.r,max(c.g,c.b))*mask,.55*mask),0.,1.);
+  // Data: a core covered in glyphs; streams of signs spiral in, pulled by the core (accretion).
+  float R=.36+breath;
+  float inside=smoothstep(R+px,R-px,r);
+  vec2 q=uv/R;float z=sqrt(max(0.,1.-dot(q,q)));
+  float sp=t*.2;vec2 pxz=mat2(cos(sp),-sin(sp),sin(sp),cos(sp))*vec2(q.x,z);vec3 p=vec3(pxz.x,q.y,pxz.y);
+  vec2 sg=vec2(atan(p.x,p.z)*2.6,asin(clamp(p.y,-1.,1.))*3.2);
+  vec2 sc=floor(sg),sf=fract(sg);
+  float sbit=step(.5,hash3(vec3(sc*2.3+floor(sf*vec2(3.,4.))*.7,floor(uTime*2.+hash3(vec3(sc,4.))*9.))))*step(.12,sf.x)*step(sf.x,.88)*step(.1,sf.y)*step(sf.y,.9);
+  vec3 core=uBase*1.5+uMid*sbit*(.35+.65*z)*.9+uLight*pow(1.-z,3.)*.6;
+  float lr=log(max(r,.02)/R);
+  float th=ang/6.2832;
+  float N=24.;
+  vec2 g=vec2(th*N+lr*3.,lr*7.+t*(1.1+1.5*uEnergy+uAmp));
+  vec2 cid=floor(g),cf=fract(g);
+  float lane=step(.55,hash3(vec3(mod(cid.x,N),3.,1.)+floor(t*.15+hash3(vec3(mod(cid.x,N),8.,8.)))));
+  float bit=step(.45,hash3(vec3(mod(cid.x,N),cid.y,floor(uTime*4.))+vec3(floor(cf*vec2(3.,4.))*.5,0.)));
+  float cell=step(.15,cf.x)*step(cf.x,.85)*step(.1,cf.y)*step(cf.y,.9);
+  float head=smoothstep(.75,1.,fract(cid.y*.13+hash3(vec3(mod(cid.x,N),1.,5.))));
+  float outside=step(R,r)*exp(-max(r-R,0.)*3.2)*smoothstep(.95,.7,r);
+  vec3 stream=(uMid+mix(uLight,vec3(1.),.5)*head*1.3)*bit*cell*lane*outside*(1.+uAmp*.7);
+  col=core*inside+stream*(1.-inside)+uMid*exp(-max(r-R,0.)*14.)*.35;
+  alpha=clamp(inside+max(stream.g,col.g*.6)*(1.-inside),0.,1.);
  }else if(uMat==3){
-  // Smoke: ink billows. Overlapping puffs, a dark heart, pale curling edges and swirl lines.
-  float ts=t*(.10+.12*uEnergy);
-  vec2 q=vec2(fbm(vec3(uv*1.2,ts)),fbm(vec3(uv*1.2+5.2,ts+3.)));
-  vec2 w=vec2(fbm(vec3(uv*1.6+q*1.8+vec2(1.7,9.2),ts*1.3)),fbm(vec3(uv*1.6+q*1.8+vec2(8.3,2.8),ts*1.3)));
-  vec2 wv=uv+(w-.5)*.55+(q-.5)*.25;
-  float puffs=0.;
-  for(int i=0;i<7;i++){
-   float fi=float(i);
-   float ang=fi*.9+ts*.8;
-   vec2 c0=(i==0?vec2(0.):vec2(cos(ang)*1.25,sin(ang)*.85)*(.26+.06*sin(ts*2.+fi)))+(q-.5)*.15;
-   float rad=(i==0?.3:.2+.07*hash3(vec3(fi,5.,1.)))+uAmp*.03;
-   puffs+=exp(-dot(wv-c0,wv-c0)/(rad*rad));
-  }
-  float d=fbm(vec3(uv*2.2+w*2.6,ts));
-  float body=puffs+(d-.5)*1.2;
-  float mask=smoothstep(.38,.6,body);
-  float d2=fbm(vec3(wv*2.6+w*3.,ts*1.5));
-  float shade=clamp((body-.6)*.3+(d2-.5)*1.7+.38-uv.y*.3,0.,1.);
-  vec3 c=mix(uLight,uMid,smoothstep(.12,.55,shade));
-  c=mix(c,uBase,smoothstep(.55,.95,shade));
-  float curl=abs(fract(d2*5.+body*.7)-.5)*2.;
-  float lines=smoothstep(.13,.0,curl)*smoothstep(.25,.75,shade);
-  c=mix(c,mix(uLight,vec3(1.),.3),lines*.55);
-  float edgeLight=smoothstep(.6,.45,body)*mask;
-  c=mix(c,uLight*1.05,edgeLight*.6);
-  alpha=mask*(.75+.25*shade);
+  // Smoke: a dark smoke ball wrapped in an atmosphere of wisps. Inner layers turn faster than
+  // outer ones (differential rotation), which stretches the smoke into curling spirals.
+  float R=.38+breath+uAmp*.03;
+  float rr=max(r,.05);
+  float omega=.3*pow(R/rr,.8)*(1.+uEnergy);
+  float sa=t*.3*omega;
+  vec2 turb=vec2(fbm(vec3(uv*1.3,t*.08)),fbm(vec3(uv*1.3+4.,t*.08)))-.5;
+  vec2 ruv=mat2(cos(sa),-sin(sa),sin(sa),cos(sa))*(uv+turb*.35);
+  vec3 p=vec3(ruv*1.7,t*.12);
+  float w=fbm(p+fbm(p*1.6)*1.5);
+  float d=fbm(vec3(ruv*3.+w*1.8,t*.15));
+  float env=exp(-max(r-R,0.)*(4.2-uAmp*1.5));
+  float inside=smoothstep(R+.04,R-.06,r+(d-.5)*.12);
+  float dens=clamp(smoothstep(.38,.72,d)*env*1.25+inside,0.,1.);
+  float mask=smoothstep(.12,.35,dens);
+  vec3 c=mix(uLight,uMid,smoothstep(.3,.75,dens));
+  c=mix(c,uBase,smoothstep(.7,1.,dens)*(.4+.6*inside));
+  float curl=abs(fract(d*5.+w*2.)-.5)*2.;
+  c=mix(c,mix(uLight,vec3(1.),.3),smoothstep(.13,.0,curl)*smoothstep(.3,.8,dens)*.55*(1.-inside));
+  c=mix(c,mix(uBase,uMid,.35+.3*w),inside*.85);
+  c=mix(c,uLight*.9,inside*smoothstep(R-.1,R,r)*.5);
+  c=mix(c,uLight*1.05,smoothstep(.35,.12,dens)*mask*.6);
+  alpha=mask*(.7+.3*dens);
   col=c*alpha;
  }else{
-  // Fire: tongues of flame rising from a dark red heart.
-  vec2 p=uv*1.45+vec2(0.,.42);
-  float rise=t*(.9+.7*uEnergy);
-  float n=fbm(vec3(p.x*2.3,p.y*1.5-rise,t*.25));
-  float n2=fbm(vec3(p.x*5.,p.y*3.4-rise*1.7,t*.5));
-  float w=.5*(1.-smoothstep(-.4,1.1,p.y)*.55);
-  float shape=1.-length(vec2(p.x/max(w,.05),(p.y+.05)*1.05));
-  float tongues=smoothstep(-.1,1.,p.y);
-  float flame=shape+(n-.5)*1.1+(n2-.5)*.5+tongues*(n-.42)*.9+uAmp*.28;
-  float I=clamp(flame*1.55,0.,1.);
-  vec3 c=mix(uBase*.6,uBase,smoothstep(.0,.25,I));
-  c=mix(c,uMid,smoothstep(.18,.5,I));
-  c=mix(c,uLight,smoothstep(.45,.78,I));
-  c=mix(c,uHot,smoothstep(.8,1.,I)*(.6+.4*n2));
-  float heart=smoothstep(.42,.05,length((p-vec2(.06,-.05))*vec2(1.,.8))+(n2-.5)*.3);
-  c=mix(c,mix(uBase,uMid,.3),heart*.85*smoothstep(.45,.9,I));
-  alpha=smoothstep(.02,.3,I);
-  col=c*alpha;
+  // Fire: a burning ball. Its surface churns; flames rise outward from it (convection),
+  // each tongue living and dying at random around the ball.
+  float R=.33+breath+uAmp*.02;
+  vec2 q=uv/R;float z=sqrt(max(0.,1.-dot(q,q)));
+  float sa=t*.12;vec2 nxz=mat2(cos(sa),-sin(sa),sin(sa),cos(sa))*vec2(q.x,z);vec3 n=vec3(nxz.x,q.y,nxz.y);
+  float heat=clamp(fbm(n*3.+vec3(0.,0.,t*.45))*.9+fbm(n*6.-vec3(t*.35))*.45,0.,1.);
+  vec3 surf=mix(uMid,uLight,smoothstep(.3,.7,heat));
+  surf=mix(surf,uHot,smoothstep(.65,.95,heat));
+  surf=mix(uBase,surf,.55+.45*z);
+  float inside=smoothstep(R+px,R-px,r);
+  float h=max(r-R,0.)/R;
+  float fl=fbm(vec3(dir*2.4,h*1.8-t*1.2));
+  float fl2=fbm(vec3(dir*6.,h*3.6-t*2.));
+  float top=.25+.9*fl*fl+.35*fl2+uAmp*.45+uEnergy*.2;
+  float I=clamp((top-h)/max(top,.05),0.,1.)*(.55+.7*fl2);
+  I=clamp(I,0.,1.);
+  vec3 c=mix(uBase*.7,uBase,smoothstep(.0,.2,I));
+  c=mix(c,uMid,smoothstep(.15,.45,I));
+  c=mix(c,uLight,smoothstep(.45,.75,I));
+  c=mix(c,uHot,smoothstep(.85,1.,I));
+  float fa=smoothstep(.02,.25,I)*step(R-px,r);
+  col=surf*inside+c*fa*(1.-inside);
+  alpha=clamp(inside+fa*(1.-inside),0.,1.);
  }
  // A follow-up is ready: a warm, slow pulse around any material.
  float pulse=.5+.5*sin(uTime*6.5);
