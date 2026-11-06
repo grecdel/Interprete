@@ -11,7 +11,7 @@ window.InterpreteMicrophone = class {
     const supported = ['audio/webm;codecs=opus', 'audio/webm', 'audio/ogg;codecs=opus', 'audio/mp4'].find(type => MediaRecorder.isTypeSupported(type));
     if (!supported) throw new Error('Ce système ne propose pas de format audio compatible.');
     this.stream = await navigator.mediaDevices.getUserMedia({audio: true, video: false});
-    this.mimeType = supported; this.active = true; window.InterpreteOrb?.attachStream(this.stream); this.recordPart();
+    this.mimeType = supported; this.active = true; this.recordPart();
   }
   recordPart() {
     if (!this.active) return;
@@ -51,7 +51,7 @@ window.InterpreteMicrophone = class {
   stop() {
     this.active = false; clearTimeout(this.timer);
     if (this.recorder?.state === 'recording') { this.stopping = true; this.recorder.stop(); }
-    window.InterpreteOrb?.detachStream(); this.stream?.getTracks().forEach(track => track.stop());
+    this.stream?.getTracks().forEach(track => track.stop());
     const completion = new Promise(resolve => this.waiters.push(resolve));
     this.notify(); return completion;
   }

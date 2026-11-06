@@ -17,10 +17,8 @@ let liveTimer;
 let restartTimer;
 let restartCount = 0;
 let lastRequest = 0;
-let priorityLive = false; // F3: set when a watched keyword is heard.
 let entryCount = 0;
 let unreadCount = 0;
-let followUpPreview = ''; // F2: question shown on the closed bubble until the panel opens.
 let floatingWindow = null;
 let floatingSize = {width: 380, height: 720};
 const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
@@ -52,17 +50,16 @@ function updateStatus() {
   companion.classList.toggle('is-listening', listening);
   companion.classList.toggle('is-busy', busy);
   ui.microphone.setAttribute('aria-pressed', String(wantedListening));
-  ui['listen-title'].textContent = wantedListening ? (listening ? 'Pause' : 'Ouverture du micro…') : 'Écouter';
-  ui['listen-subtitle'].textContent = wantedListening ? 'Mettre l’écoute en pause. La bulle fait de même.' : 'Écouter un reportage. Touchez aussi la bulle.';
+  ui['listen-title'].textContent = wantedListening ? (listening ? 'À l’écoute du reportage' : 'Ouverture du micro…') : 'Écouter un reportage';
+  ui['listen-subtitle'].textContent = wantedListening ? 'Cliquez pour mettre l’écoute en pause.' : 'Un clic. Les infos se vérifient au fil du direct.';
   ui.microphone.querySelector('use').setAttribute('href', wantedListening ? '#i-pause' : '#i-mic');
-  // 0.7: when the panel is open, the bubble is the microphone button.
-  const panelOpen = companion.classList.contains('is-open');
-  ui.bubble.setAttribute('aria-label', panelOpen ? (wantedListening ? 'Mettre l’écoute en pause' : 'Écouter un reportage') : followUpPreview ? `Relance prête : ${followUpPreview}. Ouvrir Interprète` : 'Activer Interprète et choisir une action');
-  ui['bubble-label'].textContent = followUpPreview && !panelOpen ? `Relance prête · ${followUpPreview}` : wantedListening ? 'Écoute active · ouvrir les actions' : busy ? 'Vérification en cours…' : 'Un clic pour m’activer';
+  ui.bubble.setAttribute('aria-label', 'Activer Interprète et choisir une action');
+  ui['bubble-label'].textContent = wantedListening ? 'Écoute active · ouvrir les actions' : busy ? 'Vérification en cours…' : 'Un clic pour m’activer';
   if (!recognition && !desktop) {
     ui['listen-title'].textContent = 'La saisie reste à votre écoute';
     ui['listen-subtitle'].textContent = 'Pour le micro, utilisez Chrome sur ordinateur.';
-    if (!panelOpen && !followUpPreview) { ui.bubble.setAttribute('aria-label', 'Activer Interprète et choisir une action'); ui['bubble-label'].textContent = 'Un clic pour ouvrir'; }
+    ui.bubble.setAttribute('aria-label', 'Activer Interprète et choisir une action');
+    ui['bubble-label'].textContent = 'Un clic pour ouvrir';
   }
   ui.verify.disabled = busy || ui.transcript.value.trim().length < 10;
   ui['export-html'].disabled = busy || endingSession;
@@ -70,12 +67,8 @@ function updateStatus() {
 function updateArchiveCount() {
   const count = archive.session.transcript.length;
   ui['archive-count'].textContent = `${count} propos transcrit${count > 1 ? 's' : ''}`;
-  if (count || archive.session.submissions.length) markUnsaved(true);
+  if (count || archive.session.submissions.length) desktop?.setUnsaved(true);
 }
-// In a browser tab the session only lives in memory: warn before closing it (desktop and Android ask natively).
-let sessionUnsaved = false;
-function markUnsaved(value) { sessionUnsaved = value; desktop?.setUnsaved(value); }
-if (!desktop) window.addEventListener('beforeunload', event => { if (sessionUnsaved) { event.preventDefault(); event.returnValue = ''; } });
 async function apiFetch(path, options = {}) {
   if (!desktop) return fetch(path, options);
   const result = await desktop.request(path, options.body ? JSON.parse(options.body) : undefined);
@@ -97,13 +90,11 @@ async function refreshConfiguration() {
 
 function setPanelOpen(open) {
   companion.classList.toggle('is-open', open);
-  queueMicrotask(updateStatus);
   ui['assistant-panel'].hidden = !open;
   ui.bubble.setAttribute('aria-expanded', String(open));
   desktop?.setPanelOpen(open);
   if (open) {
     unreadCount = 0; ui.unread.hidden = true;
-    followUpPreview = ''; companion.classList.remove('has-followup');
     if (floatingWindow) {
       try { floatingWindow.resizeTo(floatingSize.width, floatingSize.height); } catch { /* Browser controls window dimensions. */ }
     }
@@ -127,7 +118,7 @@ function updateComposer() {
   updateStatus();
 }
 function cleanText(text) {
-  return String(text || '').replace(/\u3010[^\u3011]*\u3011/g, '').replace(/\uE200[^\uE201]*\uE201/g, '').replace(/\[([^\]]+)\]\(https?:\/\/[^\s)]+\)/g, '$1').replace(/\*\*([^*]+)\*\*/g, '$1').trim();
+  return String(text || '').replace(/【[^】]*】/g, '').replace(/[^]*/g, '').replace(/\[([^\]]+)\]\(https?:\/\/[^\s)]+\)/g, '$1').replace(/\*\*([^*]+)\*\*/g, '$1').trim();
 }
 function sourceList(sources) {
   const list = node('div', 'sources');
@@ -152,37 +143,13 @@ function sourceList(sources) {
   }
   return list;
 }
-// UI4: evidence level from the sources actually attached, distinct from the verdict and the model's confidence.
-function proofLevel(check) {
-  const hosts = new Set();
-  for (const source of Array.isArray(check.sources) ? check.sources : []) {
-    try { hosts.add(new URL(source.url).hostname.replace(/^www\./, '')); } catch { /* Ignored: not a usable link. */ }
-  }
-  if (!hosts.size) return 0;
-  // F6: sites that repeat one origin (wire story, press release) are not independent confirmation.
-  if (hosts.size === 1 || check.common_origin) return 1;
-  return (check.source_excerpts || []).some(excerpt => excerpt?.published_at) ? 3 : 2;
-}
-const proofLabels = ['aucune source', 'un seul site', 'sources recoupées', 'recoupées et datées'];
-function proofMeter(level, check = {}) {
-  const meter = node('span', `proof-meter level-${level}`);
-  const label = check.common_origin && level === 1 ? 'origine commune probable' : proofLabels[level];
-  meter.title = `Niveau de preuve : ${label}. Il dépend des sources jointes, pas de l’assurance du modèle.`;
-  meter.setAttribute('aria-label', `Niveau de preuve ${level} sur 3 : ${label}`);
-  meter.append(node('span', 'proof-label', 'Preuve'));
-  for (let notch = 1; notch <= 3; notch++) meter.append(node('i', notch <= level ? 'on' : ''));
-  return meter;
-}
-window.InterpreteProof = {proofLevel};
 function renderCheck(check) {
   const card = node('article', 'result-card');
   if (check.id) card.id = check.id;
   const sources = sourceList(check.sources);
   let verdict = check.verdict;
   if (verdict in verdictStyles && !sources) verdict = 'Informations insuffisantes';
-  const meta = node('div', 'card-meta');
-  meta.append(node('span', `verdict ${verdictStyles[verdict] || 'unsure'}`, verdict || 'Éclairage'), proofMeter(sources ? proofLevel(check) : 0, check));
-  card.append(meta);
+  card.append(node('span', `verdict ${verdictStyles[verdict] || 'unsure'}`, verdict || 'Éclairage'));
   card.append(node('h4', '', cleanText(check.claim)), node('p', 'result-summary', cleanText(check.summary)));
   const evidence = Array.isArray(check.evidence) ? check.evidence.filter(item => typeof item === 'string') : [];
   if (check.follow_up) {
@@ -240,28 +207,6 @@ function createEntry(text, kind) {
   ui.feed.prepend(group); ui.feed.scrollTop = 0;
   return {group, pending, excerpt};
 }
-// F2: show the prepared question on the closed bubble.
-function announceFollowUp(checks) {
-  if (companion.classList.contains('is-open')) return;
-  const ready = checks.find(check => typeof check.follow_up === 'string' && check.follow_up.trim());
-  if (!ready) return;
-  followUpPreview = cleanText(ready.follow_up).slice(0, 160); companion.classList.add('has-followup');
-  try { navigator.vibrate?.(40); } catch { /* Vibration is optional. */ }
-  updateStatus();
-}
-// F4: a provisional follow-up, without web search, shown while the full verification runs.
-function quickEnabled() { try { return localStorage.getItem('interprete-quick') !== 'off'; } catch { return true; } }
-function renderProvisional(check) {
-  const card = node('article', 'provisional-card');
-  card.append(node('span', 'verdict provisional', 'Piste provisoire · rien n’est encore vérifié'), node('h4', '', cleanText(check.claim)));
-  if (check.follow_up) {
-    const followUp = node('div', 'follow-up');
-    followUp.append(node('span', 'follow-up-label', 'RELANCE IMMÉDIATE · À CONFIRMER'), node('p', '', cleanText(check.follow_up)));
-    card.append(followUp);
-  }
-  card.append(node('p', 'provisional-note', cleanText(check.summary) || 'Les sources arrivent.'));
-  return card;
-}
 async function runVerification(text, kind, entry = null, transcriptIds = []) {
   if (busy) return false;
   busy = true; updateStatus(); ui.error.hidden = true;
@@ -281,40 +226,22 @@ async function runVerification(text, kind, entry = null, transcriptIds = []) {
   lastRequest = Date.now();
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), 100000);
-  const preparation = window.InterpretePreparation?.payload() || undefined;
-  const requestKind = kind === 'live' ? 'live' : 'auto';
-  let settled = false; const provisional = [];
-  if (quickEnabled() && !/^https?:\/\/\S+$/i.test(text.trim())) {
-    apiFetch('/api/verify', {method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({transcript: text, kind: requestKind, mode: 'quick', preparation})})
-      .then(response => response.ok ? response.json() : null)
-      .then(result => {
-        if (settled || !Array.isArray(result?.checks) || !result.checks.length) return;
-        current.record.provisional_checks = result.checks;
-        for (const check of result.checks) { const card = renderProvisional(check); provisional.push(card); current.group.insertBefore(card, current.pending); }
-        announceFollowUp(result.checks);
-      })
-      .catch(() => { /* The full verification still answers. */ });
-  }
   try {
-    const response = await apiFetch('/api/verify', {method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({transcript: text, kind: requestKind, context, preparation}), signal: controller.signal});
+    const response = await apiFetch('/api/verify', {method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({transcript: text, kind: kind === 'live' ? 'live' : 'auto', context}), signal: controller.signal});
     const result = await response.json();
     if (!response.ok) throw new Error(result.error || 'La recherche a échoué.');
     const checks = archive.completeSubmission(current.record, result);
     current.record.checked_at = result.checked_at;
-    settled = true; for (const card of provisional) card.remove();
     current.pending.remove();
     for (const check of checks) current.group.insertBefore(renderCheck(check), current.excerpt);
     entryCount += checks.length;
     ui['feed-count'].textContent = `${entryCount} éclairage${entryCount > 1 ? 's' : ''}`;
     if (!companion.classList.contains('is-open')) {
       unreadCount += checks.length; ui.unread.textContent = unreadCount; ui.unread.hidden = false;
-      announceFollowUp(checks);
     }
     if (kind !== 'live' && ui.transcript.value.trim() === text) { ui.transcript.value = ''; updateComposer(); }
   } catch (error) {
     current.record.status = 'failed'; current.record.error = error.name === 'AbortError' ? 'Délai de recherche dépassé.' : error.message;
-    settled = true;
-    for (const card of provisional) card.querySelector('.provisional-note').textContent = 'La vérification complète a échoué : cette piste reste non vérifiée.';
     current.pending.remove();
     const failure = node('div', 'result-card failed-search');
     failure.append(node('span', 'verdict unsure', 'Recherche interrompue'), node('p', 'result-summary', error.name === 'AbortError' ? 'La recherche prend trop de temps. Réessayez avec un extrait plus court.' : error.message));
@@ -331,17 +258,17 @@ function scheduleLive() {
   clearTimeout(liveTimer);
   if (!wantedListening || busy || configured !== true || pendingSpeech.trim().length < 10) return;
   // Flush after a short pause, or after eight seconds of continuous final results.
-  const pause = priorityLive ? 600 : Math.min(2500, Math.max(0, 8000 - (Date.now() - pendingSince)));
-  const cooldown = priorityLive ? 0 : Math.max(0, 20000 - (Date.now() - lastRequest));
+  const pause = Math.min(2500, Math.max(0, 8000 - (Date.now() - pendingSince)));
+  const cooldown = Math.max(0, 20000 - (Date.now() - lastRequest));
   liveTimer = setTimeout(flushLive, Math.max(pause, cooldown));
-  ui['live-queue'].textContent = priorityLive ? 'Mot-clé repéré : vérification prioritaire.' : cooldown > 2500 ? 'Extrait en attente de la prochaine recherche…' : 'L’extrait sera vérifié après une courte pause.';
+  ui['live-queue'].textContent = cooldown > 2500 ? 'Extrait en attente de la prochaine recherche…' : 'L’extrait sera vérifié après une courte pause.';
 }
 async function flushLive() {
   if (!wantedListening || busy || configured !== true) return;
   const text = pendingSpeech.trim();
   if (text.length < 10) return;
   const transcriptIds = pendingTranscriptIds;
-  pendingSpeech = ''; pendingSince = 0; pendingTranscriptIds = []; priorityLive = false;
+  pendingSpeech = ''; pendingSince = 0; pendingTranscriptIds = [];
   ui['live-queue'].textContent = 'Recherche en cours. L’écoute continue.';
   const accepted = await runVerification(text, 'live', null, transcriptIds);
   if (!accepted) {
@@ -400,8 +327,6 @@ function acceptSpeech(text, audioRef = null) {
   if (!pendingSince) pendingSince = Date.now();
   pendingSpeech = `${pendingSpeech} ${text}`.trim();
   finalPreview = `${finalPreview} ${text}`.trim().slice(-600);
-  // F3: a watched keyword or figure skips the wait between automatic searches.
-  if (window.InterpretePreparation?.matches(text)) priorityLive = true;
 }
 if (recognition) {
   recognition.lang = 'fr-FR'; recognition.continuous = true; recognition.interimResults = true;
@@ -411,7 +336,7 @@ if (recognition) {
   };
   recognition.onresult = event => {
     if (!wantedListening) return;
-    restartCount = 0; window.InterpreteOrb?.pulse(0.7);
+    restartCount = 0;
     let interim = '';
     for (let i = event.resultIndex; i < event.results.length; i++) {
       const text = event.results[i][0].transcript.trim();
@@ -497,7 +422,7 @@ ui['export-html'].onclick = async () => {
   }
   try {
     const saved = await archive.exportHtml();
-    if (saved !== false) { ui['archive-status'].textContent = 'Compte rendu HTML exporté, avec la transcription et la carte. Conservez aussi le JSON pour les comparaisons futures.'; markUnsaved(false); }
+    if (saved !== false) { ui['archive-status'].textContent = 'Compte rendu HTML exporté, avec la transcription et la carte. Conservez aussi le JSON pour les comparaisons futures.'; desktop?.setUnsaved(false); }
     else ui['archive-status'].textContent = 'Enregistrement annulé. La session est toujours disponible.';
   } catch { ui['archive-status'].textContent = 'L’archive n’a pas pu être enregistrée. La session reste disponible.'; }
   finally { endingSession = false; updateStatus(); }
@@ -525,11 +450,6 @@ if (desktop) {
   ui['settings-button'].onclick = () => toggleSettings(ui['settings-tray'].hidden);
   ui['quit-desktop'].onclick = () => desktop.quit();
   desktop.onOpen(() => { if(!window.InterpreteLauncher)setPanelOpen(true); });
-  desktop.onService?.(state => {
-    if (state === 'restarting') showError('Le service de recherche s’est arrêté. Redémarrage en cours ; votre session est conservée.');
-    else if (state === 'ready') { ui.error.hidden = true; refreshConfiguration(); }
-    else showError('Le service de recherche ne redémarre pas. Exportez votre session depuis l’archive, puis relancez Interprete.');
-  });
   desktop.settings().then(settings => {
     ui['remember-key'].disabled = !settings.canRemember;
     if (!settings.canRemember) ui['storage-help'].textContent = 'Aucun coffre sécurisé disponible : la clé restera uniquement en mémoire.';
@@ -553,10 +473,7 @@ if (desktop) {
       floatingSize = {width: Math.min(460, Math.max(360, Math.round(screen.availWidth / 4))), height: Math.min(780, Math.max(480, screen.availHeight - 100))};
       floatingWindow = await window.documentPictureInPicture.requestWindow(floatingSize);
       const pip = floatingWindow;
-      pip.document.title = 'Interprete'; pip.document.documentElement.lang = 'fr';
-      // Carry the theme and companion classes over: the floating window has its own <html> and <body>.
-      pip.document.documentElement.dataset.theme = document.documentElement.dataset.theme || 'pastel';
-      pip.document.body.className = ['pip-body', ...[...document.body.classList].filter(name => name !== 'is-detached')].join(' ');
+      pip.document.title = 'Interprete'; pip.document.documentElement.lang = 'fr'; pip.document.body.className = 'pip-body';
       const stylesheet = pip.document.createElement('link'); stylesheet.rel = 'stylesheet'; stylesheet.href = new URL('/style.css', window.location.href).href;
       pip.document.head.append(stylesheet);
       pip.document.body.append(document.querySelector('.icon-library').cloneNode(true), companion);
@@ -565,8 +482,6 @@ if (desktop) {
       setPanelOpen(true);
       pip.addEventListener('pagehide', () => {
         stopListening();
-        for (const name of pip.document.body.classList) if (name !== 'pip-body') document.body.classList.add(name);
-        if (!pip.document.body.classList.contains('launcher-visible')) document.body.classList.remove('launcher-visible');
         document.body.append(companion); floatingWindow = null;
         document.body.classList.remove('is-detached'); document.getElementById('detached-message').hidden = true;
         ui.detach.setAttribute('aria-label', 'Ouvrir en fenêtre flottante'); ui.detach.title = 'Rester au-dessus des autres applications';
@@ -585,7 +500,7 @@ refreshConfiguration().then(() => { scheduleLive(); });
 
 // Appearance preferences contain no interview data or API credentials.
 (() => {
-  const themes = {pastel: 'Pastel', dark: 'Sombre', matrix: 'Matrix', investigation: 'Enquête', fire: 'Feu'};
+  const themes = {pastel: 'Pastel', dark: 'Sombre', matrix: 'Matrix', investigation: 'Enquête'};
   const label = document.createElement('label'); label.className = 'theme-control';
   label.textContent = 'Ambiance ';
   const select = document.createElement('select'); select.setAttribute('aria-label', 'Thème de l’interface');
@@ -594,9 +509,9 @@ refreshConfiguration().then(() => { scheduleLive(); });
   }
   function apply(value, notify = true) {
     const theme = Object.hasOwn(themes, value) ? value : 'pastel';
-    document.documentElement.dataset.theme = theme; companion.ownerDocument.documentElement.dataset.theme = theme; select.value = theme;
+    document.documentElement.dataset.theme = theme; select.value = theme;
     if(notify)window.interpreteDesktop?.setTheme?.(theme)?.catch(() => {});
-    document.querySelector('meta[name="theme-color"]')?.setAttribute('content', theme === 'pastel' ? '#f3eff9' : theme === 'matrix' ? '#030c08' : theme === 'fire' ? '#140c0a' : '#10131d');
+    document.querySelector('meta[name="theme-color"]')?.setAttribute('content', theme === 'pastel' ? '#f3eff9' : theme === 'matrix' ? '#030c08' : '#10131d');
   }
   let saved = 'pastel'; try { saved = localStorage.getItem('interprete-theme') || saved; } catch {}
   apply(saved, false);
@@ -618,7 +533,7 @@ refreshConfiguration().then(() => { scheduleLive(); });
     const link = document.createElement('a'); link.textContent = name; link.target = '_blank'; link.rel = 'noopener noreferrer';
     link.href = 'https://www.google.com/search?q=' + encodeURIComponent(scope);
     link.addEventListener('click', () => {
-      const query = ui.transcript.value.trim().slice(0, 600);
+      const query = document.getElementById('transcript').value.trim().slice(0, 600);
       link.href = 'https://www.google.com/search?q=' + encodeURIComponent(scope + ' ' + query);
     }); links.append(link);
   }
