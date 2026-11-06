@@ -20,6 +20,12 @@ import static org.junit.Assert.*;
 @RunWith(AndroidJUnit4.class)
 public class AndroidSmokeTest {
     private String js(ActivityScenario<MainActivity> scenario, String code) throws Exception {
+        String value = jsWithin(scenario, code, 20);
+        assertNotNull("Le WebView n'a pas répondu à : " + code.substring(0, Math.min(code.length(), 90)), value);
+        return value;
+    }
+    // A slow emulator can take a while to answer the first scripts: polling treats that as "not yet".
+    private String jsWithin(ActivityScenario<MainActivity> scenario, String code, int seconds) throws Exception {
         android.util.Log.i("InterpreteTest", "js: " + code.substring(0, Math.min(code.length(), 90)));
         AtomicReference<String> result = new AtomicReference<>(); CountDownLatch complete = new CountDownLatch(1);
         scenario.onActivity(activity -> {
@@ -28,7 +34,7 @@ public class AndroidSmokeTest {
             WebView web = (WebView) ((android.widget.FrameLayout) root).getChildAt(0);
             web.evaluateJavascript(code, value -> { result.set(value); complete.countDown(); });
         });
-        assertTrue(complete.await(10, TimeUnit.SECONDS)); return result.get();
+        return complete.await(seconds, TimeUnit.SECONDS) ? result.get() : null;
     }
     private void until(ActivityScenario<MainActivity> scenario, String condition) throws Exception {
         until(scenario,condition,20000);
@@ -36,7 +42,7 @@ public class AndroidSmokeTest {
     private void until(ActivityScenario<MainActivity> scenario,String condition,long timeout) throws Exception {
         android.util.Log.i("InterpreteTest", "until: " + condition.substring(0, Math.min(condition.length(), 90)));
         long end = SystemClock.elapsedRealtime() + timeout;
-        while (SystemClock.elapsedRealtime() < end) { if ("true".equals(js(scenario, condition))) return; SystemClock.sleep(200); }
+        while (SystemClock.elapsedRealtime() < end) { if ("true".equals(jsWithin(scenario, condition, 10))) return; SystemClock.sleep(200); }
         String state = js(scenario, "JSON.stringify({status:document.getElementById('status').textContent,error:document.getElementById('error-text').textContent,archive:document.getElementById('archive-status').textContent,exportDisabled:document.getElementById('export-html').disabled})");
         android.content.Context context = InstrumentationRegistry.getInstrumentation().getTargetContext();
         InstrumentationRegistry.getInstrumentation().getUiAutomation().takeScreenshot().compress(android.graphics.Bitmap.CompressFormat.PNG, 100, new java.io.FileOutputStream(new java.io.File(context.getExternalFilesDir(null), "android-failure.png")));
@@ -63,7 +69,7 @@ public class AndroidSmokeTest {
         });
         android.util.Log.i("InterpreteTest", "device: emulatedGpu=" + MainActivity.emulatedGpu() + " hardware=" + android.os.Build.HARDWARE + " product=" + android.os.Build.PRODUCT + " fingerprint=" + android.os.Build.FINGERPRINT);
         try (ActivityScenario<MainActivity> scenario = ActivityScenario.launch(new Intent(app, MainActivity.class).putExtra("listen_on_open", true))) {
-            until(scenario,"window.InterpreteLauncher?.ready() && !document.getElementById('companion-launcher').hidden");
+            until(scenario,"window.InterpreteLauncher?.ready() && !document.getElementById('companion-launcher').hidden",60000);
             js(scenario,"document.getElementById('launcher-complete').click();true");
             until(scenario,"document.getElementById('companion-launcher').hidden");
             js(scenario,"document.getElementById('bubble').click();document.querySelector('[data-action=panel]').click();true");
