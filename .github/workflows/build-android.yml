@@ -93,14 +93,20 @@ jobs:
           target: google_apis
           profile: pixel_6
           disable-animations: true
+          ram-size: 4096M
           emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim -camera-back none
           script: |
             adb install -r android-output/app-debug.apk
             adb install -r android-output/app-debug-androidTest.apk
+            # Let the services started after boot settle: the WebView renderer was killed under memory pressure.
+            adb shell 'while [ "$(getprop sys.boot_completed)" != 1 ]; do sleep 2; done'
+            sleep 45
+            adb shell cat /proc/meminfo | head -3 || true
             adb logcat -c
             timeout 900 adb shell am instrument -w -r fr.interprete.assistant.test/androidx.test.runner.AndroidJUnitRunner | tee android-instrumentation.txt || true
             adb logcat -d -s AndroidRuntime:E chromium:I InterpreteTest:I > android-logcat.txt || true
             grep -E "InterpreteTest|AndroidRuntime|chromium" android-logcat.txt | grep -v "js: " | tail -60 || true
+            adb logcat -d -s lmkd:I ActivityManager:I | grep -iE "kill|lowmem|low memory" | tail -30 || true
             adb logcat -d '*:W' | grep -iE "renderer|sandboxed_process|lowmemory|lmkd|killing|tombstone|DEBUG|libc|signal|fatal|abort|gpu|webgl|egl|gles" | tail -80 || true
             adb pull /sdcard/Android/data/fr.interprete.assistant/files/android-failure.png android-failure.png || true
             python3 -c "from pathlib import Path; assert 'OK (1 test)' in Path('android-instrumentation.txt').read_text()"
