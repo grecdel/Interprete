@@ -46,11 +46,11 @@ final class BloomDrawable extends Drawable {
     BloomDrawable(Context context, String theme, State state) {
         material = theme; this.state = state;
         switch (theme) {
-            case "dark": colors = new int[]{0xffff4fe0, 0xffa326ff, 0xffffd2ff}; base = 0xff14031f; materialId = 1; break;
-            case "matrix": colors = new int[]{0xffb9ffd8, 0xff1fd58a, 0xffeafff3}; base = 0xff020c07; materialId = 2; break;
-            case "investigation": colors = new int[]{0xffece9e4, 0xff9a959a, 0xffffffff}; base = 0xff16151a; materialId = 3; break;
-            case "fire": colors = new int[]{0xffff9a1f, 0xfff0400f, 0xffffeeb0}; base = 0xff8c1208; materialId = 4; break;
-            default: colors = new int[]{0xff8ff3ff, 0xff22b8e8, 0xffffffff}; base = 0xff0b4f9c; materialId = 0;
+            case "dark": colors = new int[]{0xff46f0c8, 0xff9b5cff, 0xffff6fd8}; base = 0xff2a1460; materialId = 1; break;
+            case "matrix": colors = new int[]{0xff6dffb0, 0xff19c27a, 0xffd4ff93}; base = 0xff04351d; materialId = 2; break;
+            case "investigation": colors = new int[]{0xfff1e3cf, 0xffb9a58f, 0xffffffff}; base = 0xff4a4038; materialId = 3; break;
+            case "fire": colors = new int[]{0xffffb23e, 0xffff5a1f, 0xffffe7a3}; base = 0xff6a1408; materialId = 4; break;
+            default: colors = new int[]{0xff7fe6ff, 0xff8f7dff, 0xffff9fd6}; base = 0xff5a7bd8; materialId = 0;
         }
         runtime = Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU && !MainActivity.emulatedGpu() ? loadShader(context) : null;
     }
@@ -102,7 +102,7 @@ final class BloomDrawable extends Drawable {
         listen += ((listening ? 1f : 0f) - listen) * (still ? 1 : 1 - (float) Math.exp(-delta * 2.5));
         shader.setFloatUniform("uRes", bounds.width(), bounds.height());
         shader.setFloatUniform("uTime", still ? 14f : (now - origin) / 1000f);
-        shader.setFloatUniform("uAmp", amp); shader.setFloatUniform("uEnergy", energy); shader.setFloatUniform("uAlert", 0f); shader.setFloatUniform("uListen", listen);
+        shader.setFloatUniform("uAmp", amp); shader.setFloatUniform("uEnergy", energy); shader.setFloatUniform("uAlert", 0f); shader.setFloatUniform("uListen", listen); shader.setFloatUniform("uBurst", -1f);
         shader.setFloatUniform("uSeed", seed); shader.setFloatUniform("uLife", LIFE); shader.setIntUniform("uMat", materialId);
         shader.setFloatUniform("uLight", channels(colors[0])); shader.setFloatUniform("uMid", channels(colors[1]));
         shader.setFloatUniform("uHot", channels(colors[2])); shader.setFloatUniform("uBase", channels(base));
