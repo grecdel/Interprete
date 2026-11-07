@@ -13,6 +13,12 @@ La bulle devient une sphère de particules vivante, aux couleurs de chacune des 
 - **Ambiance rangée dans les Réglages** (bouton curseurs de l’en-tête) : par défaut, elle suit le mode clair ou sombre du système (Pastel ou Sombre) ; on peut aussi la fixer. Nouvelle ambiance **Feu**.
 - **Raccourcis sur ordinateur** : Espace pour écouter ou mettre en pause, Ctrl+K pour vérifier une phrase, Échap pour fermer.
 
+## Enregistrer et filmer
+
+- **L’enregistrement fonctionne dans tous les navigateurs.** Brave bloque la reconnaissance vocale intégrée, si bien que l’écoute s’arrêtait aussitôt lancée : le son passe désormais par le service de transcription local, comme dans l’application de bureau. Chrome garde sa reconnaissance instantanée et bascule tout seul si elle échoue.
+- **Filmer l’interview** (menu « + ») : avec la caméra, ou en filmant un écran ou une fenêtre avec son son (une émission, une visioconférence). La vidéo reste sur l’appareil ; seul le son est transcrit. Chaque phrase garde son moment dans la vidéo.
+- **Revoir avec la transcription** : après le tournage, la vidéo s’affiche avec les phrases transcrites ; une phrase touchée ramène au passage. La vidéo s’enregistre en un fichier, et le compte rendu HTML exporté dans le même dossier la lit et relie chaque phrase à son moment.
+
 ## Avant et après
 
 - **Préparer l’interview** (menu « + ») : interlocuteur, sujet, date, propos attendus à vérifier à l’avance, mots et chiffres à surveiller, jusqu’à trois pièces du dossier. Ce contexte accompagne les recherches sans jamais servir de preuve. Un mot surveillé déclenche une vérification immédiate.
@@ -32,7 +38,8 @@ La bulle devient une sphère de particules vivante, aux couleurs de chacune des 
 ## Installation
 
 - Android 8+ : installer `Interprete-0.7.0-android.apk`. La bulle au-dessus des applications utilise le nouveau rendu à partir d’Android 13.
-- Linux x86_64 : rendre `Interprete-0.7.0-linux-x86_64.AppImage` exécutable, puis le lancer. Une archive portable `.tar.gz` est également fournie.
+- Fedora : ouvrir `Interprete-0.7.0-linux-x86_64.rpm` d’un double-clic et choisir Installer ; Interprète rejoint les applications.
+- Autres Linux x86_64 : rendre `Interprete-0.7.0-linux-x86_64.AppImage` exécutable, puis le lancer. Une archive portable `.tar.gz` est également fournie.
 - Les sommes SHA-256 et les informations de signature Android accompagnent les fichiers.
 
 Prototype : les conclusions et les sources doivent être contrôlées avant un usage journalistique.

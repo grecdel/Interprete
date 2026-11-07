@@ -10,7 +10,15 @@
 
 Android 8 minimum, Android System WebView à jour. Pas besoin de Python, de serveur Linux ni de Codex sur le téléphone. Les restrictions de batterie du constructeur peuvent interrompre l’écoute. [Guide Android](ANDROID.md).
 
-## Linux x86_64
+## Fedora (paquet RPM)
+
+1. Télécharger [Interprete-0.7.0-linux-x86_64.rpm](https://github.com/grecdel/Interprete/releases/download/v0.7.0/Interprete-0.7.0-linux-x86_64.rpm).
+2. Double-cliquer sur le fichier : Logiciels s’ouvre. Choisir **Installer** et confirmer avec le mot de passe de l’ordinateur.
+3. Ouvrir **Interprete** depuis les applications, comme n’importe quel logiciel. Aucune commande n’est nécessaire.
+
+Pour une mise à jour, installer de la même façon le paquet de la nouvelle version. Pour désinstaller, passer par Logiciels.
+
+## Autres Linux x86_64 (AppImage)
 
 Télécharger l’[AppImage 0.7](https://github.com/grecdel/Interprete/releases/download/v0.7.0/Interprete-0.7.0-linux-x86_64.AppImage), puis dans le dossier du téléchargement :
 
@@ -19,7 +27,7 @@ chmod +x Interprete-0.7.0-linux-x86_64.AppImage
 ./Interprete-0.7.0-linux-x86_64.AppImage
 ```
 
-On peut aussi autoriser l’exécution dans les propriétés du fichier, puis double-cliquer. Si AppImage/FUSE n’est pas disponible, télécharger l’archive `Interprete-0.7.0-linux-x64.tar.gz`, l’extraire et lancer `interprete` dans le dossier extrait.
+On peut aussi autoriser l’exécution dans les propriétés du fichier, puis double-cliquer. Sur Fedora, l’AppImage demande le paquet `fuse-libs` : le paquet RPM ci-dessus est plus simple. Si AppImage/FUSE n’est pas disponible, télécharger l’archive `Interprete-0.7.0-linux-x64.tar.gz`, l’extraire et lancer `interprete` dans le dossier extrait.
 
 Le serveur Python et l’interface sont embarqués. Les builds sont validés sous Ubuntu 22.04 ; la compatibilité avec toutes les distributions n’est pas certifiée. La mémorisation de la clé est proposée uniquement si le coffre système est disponible. Sous Wayland, le comportement « toujours au-dessus » dépend du gestionnaire de fenêtres. L’audio long conservé et son export ZIP restent des fonctions Android.
 

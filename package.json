@@ -4,12 +4,13 @@
   "private": true,
   "description": "Assistant de v\u00e9rification journalistique de bureau",
   "author": "Grec Del",
+  "homepage": "https://github.com/grecdel/Interprete",
   "main": "desktop/main.cjs",
   "scripts": {
     "desktop": "electron .",
     "test:desktop": "node tests/desktop.test.cjs",
     "pack": "electron-builder --dir --publish never",
-    "dist:linux": "electron-builder --linux AppImage tar.gz --publish never",
+    "dist:linux": "electron-builder --linux AppImage rpm tar.gz --publish never",
     "dist:windows": "electron-builder --win portable --x64 --publish never",
     "test:desktop:smoke": "node scripts/test_desktop.cjs"
   },
@@ -44,9 +45,11 @@
     "linux": {
       "target": [
         "AppImage",
+        "rpm",
         "tar.gz"
       ],
       "category": "Utility",
+      "synopsis": "Assistant de vérification journalistique",
       "icon": "docs/assets/icon.png",
       "syncDesktopName": true
     },

@@ -1,0 +1,141 @@
+name: Publier une version
+# One button on GitHub (Actions > Publier une version > Run workflow), or a pushed tag v*:
+# builds the Linux app (AppImage, RPM for Fedora, archive) and the Android APK, then publishes the release.
+# The APK is signed only when the repository holds the signing secrets (see docs/ANDROID.md);
+# otherwise the release ships without it and says so.
+on:
+  workflow_dispatch:
+  push:
+    tags: ['v*']
+concurrency:
+  group: release
+  cancel-in-progress: false
+permissions:
+  contents: read
+jobs:
+  linux:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 30
+    env:
+      CSC_IDENTITY_AUTO_DISCOVERY: 'false'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+      - name: Build tools
+        run: |
+          sudo apt-get update -qq && sudo apt-get install -y --no-install-recommends rpm
+          python -m pip install -r requirements-build.txt
+          npm ci --no-fund --no-audit
+          npx --no install-electron
+      - name: Tests
+        run: |
+          python -m unittest discover -s tests -p 'test_*.py'
+          npm run test:desktop
+      - name: Build standalone Python service
+        run: python scripts/build_backend.py
+      - name: Package Linux executables
+        run: npm run dist:linux
+      - name: Test packaged application
+        run: xvfb-run -a env INTERPRETE_DESKTOP_EXECUTABLE="$PWD/dist/linux-unpacked/interprete" npm run test:desktop:smoke
+      - name: Checksums
+        working-directory: dist
+        run: sha256sum *.AppImage *.rpm *.tar.gz > SHA256SUMS-linux
+      - uses: actions/upload-artifact@v4
+        with:
+          name: release-linux
+          path: |
+            dist/*.AppImage
+            dist/*.rpm
+            dist/*.tar.gz
+            dist/SHA256SUMS-linux
+          if-no-files-found: error
+          retention-days: 7
+  android:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: android-actions/setup-android@v3
+        with:
+          packages: 'platform-tools'
+          log-accepted-android-sdk-licenses: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - uses: gradle/actions/setup-gradle@v4
+      - name: Android SDK
+        run: |
+          set +o pipefail
+          yes | sdkmanager --licenses > /dev/null
+          set -o pipefail
+          sdkmanager 'platforms;android-36' 'build-tools;36.0.0'
+      - name: Build release APK
+        working-directory: android
+        run: ./gradlew --no-daemon :app:testDebugUnitTest :app:assembleRelease
+      - name: Sign with the project identity
+        env:
+          KEYSTORE: ${{ secrets.ANDROID_SIGNING_P12_BASE64 }}
+          PASSWORD: ${{ secrets.ANDROID_SIGNING_PASSWORD }}
+        run: |
+          mkdir -p release-android
+          if [ -z "$KEYSTORE" ] || [ -z "$PASSWORD" ]; then
+            echo "Pas de secrets de signature : la version sera publiée sans APK." | tee release-android/ABSENT.txt
+            exit 0
+          fi
+          version=$(python -c "import json;print(json.load(open('package.json'))['version'])")
+          tools="$ANDROID_HOME/build-tools/36.0.0"
+          private="$RUNNER_TEMP/signing"; mkdir -p "$private"; chmod 700 "$private"
+          printf '%s' "$KEYSTORE" | base64 -d > "$private/release.p12"
+          printf '%s' "$PASSWORD" > "$private/password.txt"
+          "$tools/zipalign" -P 16 -f 4 android/app/build/outputs/apk/release/app-release-unsigned.apk "$private/aligned.apk"
+          apk="release-android/Interprete-$version-android.apk"
+          java -jar "$tools/lib/apksigner.jar" sign --ks "$private/release.p12" --ks-key-alias interprete-release --ks-pass "file:$private/password.txt" --min-sdk-version 26 --v4-signing-enabled false --out "$apk" "$private/aligned.apk"
+          rm -rf "$private"
+          java -jar "$tools/lib/apksigner.jar" verify --verbose --print-certs "$apk" > release-android/SIGNATURE.txt
+          expected=$(sha256sum android/signing-certificate.der | cut -d' ' -f1)
+          grep -qi "certificate SHA-256 digest: $expected" release-android/SIGNATURE.txt || { echo "Le certificat de l’APK ne correspond pas à celui du projet."; rm -f "$apk"; exit 1; }
+          (cd release-android && sha256sum *.apk > SHA256SUMS)
+      - uses: actions/upload-artifact@v4
+        with:
+          name: release-android
+          path: release-android/
+          retention-days: 7
+  publish:
+    needs: [linux, android]
+    runs-on: ubuntu-22.04
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          path: files
+          merge-multiple: true
+      - name: Publish the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          version=$(python3 -c "import json;print(json.load(open('package.json'))['version'])")
+          tag="v$version"; notes="docs/RELEASE-$version.md"
+          title=$(head -1 "$notes" | sed 's/^# //')
+          tail -n +3 "$notes" > "$RUNNER_TEMP/notes.md"
+          if [ -f files/ABSENT.txt ]; then
+            printf '\n> L’APK Android sera ajouté après sa signature.\n' >> "$RUNNER_TEMP/notes.md"
+            rm files/ABSENT.txt
+          fi
+          if gh release view "$tag" > /dev/null 2>&1; then
+            gh release upload "$tag" files/* --clobber
+          else
+            gh release create "$tag" --target "$GITHUB_SHA" --prerelease --title "$title" --notes-file "$RUNNER_TEMP/notes.md" files/*
+          fi
+          echo "Version publiée : https://github.com/$GITHUB_REPOSITORY/releases/tag/$tag" >> "$GITHUB_STEP_SUMMARY"
