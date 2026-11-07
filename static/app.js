@@ -357,33 +357,81 @@ function stopListening() {
   clearTimeout(liveTimer); clearTimeout(restartTimer);
   if (recognition) { try { recognition.stop(); } catch { /* Already stopped. */ } }
   if (microphoneCapture) captureCompletion = microphoneCapture.stop();
+  if (videoCapture) { const finished = videoCapture; videoCapture = null; archive.recordCapture('video_stopped'); finished.stop().then(result => window.InterpreteVideoPanel?.finished(result)); }
+  microphoneCapture = null;
   if (!ui['live-preview'].hidden) ui['live-queue'].textContent = 'Écoute en pause. Vous pouvez la reprendre avec la bulle.';
   if (desktop) ui['live-preview'].hidden = true;
+  window.InterpreteVideoPanel?.preview(null);
   updateStatus();
   return captureCompletion;
 }
-async function startListening() {
+// Browsers transcribe through the local service (Brave and Firefox have no usable speech service);
+// the browser's own recognition remains a fallback when no key is configured.
+async function serverTranscribe(audio, mimeType) {
+  const response = await fetch('/api/transcribe', {method: 'POST', headers: {'Content-Type': mimeType}, body: audio});
+  let result = {}; try { result = await response.json(); } catch { /* Error below. */ }
+  if (!response.ok) throw new Error(result.error || 'Le service de transcription ne répond pas.');
+  return result;
+}
+let videoCapture = null;
+let preferServerTranscription = false; // Set when the browser's recognition service fails.
+async function startListening(options = {}) {
   setPanelOpen(true);
-  if (desktop) {
-    if (wantedListening || endingSession) return;
-    if (!window.interpreteRecordOnly && !configured && !await refreshConfiguration()) { toggleSettings(true); return; }
-    wantedListening = true; ui.error.hidden = true; updateStatus();
-    ui['live-preview'].hidden = false;
-    ui['live-queue'].textContent = window.interpreteRecordOnly ? 'Enregistrement local hors ligne · aucun audio envoyé à OpenAI.' : 'Transcription par extraits de 12 secondes · audio envoyé à OpenAI.';
-    const epoch = ++microphoneEpoch;
-    const capture = new window.InterpreteMicrophone({
-      transcribe: (audio, mimeType) => desktop.transcribe(audio, mimeType),
-      onText: (text, audioRef) => { acceptSpeech(text, audioRef); ui['live-transcript'].textContent = finalPreview; scheduleLive(); },
-      onError: message => { archive.recordCapture('transcription_interrupted'); if (epoch === microphoneEpoch) stopListening(); showError(message); }
-    });
-    microphoneCapture = capture;
-    try {
-      await capture.start();
-      if (!wantedListening || epoch !== microphoneEpoch) { capture.stop(); return; }
-      listening = true; archive.recordCapture('microphone_started'); updateStatus();
-    } catch { stopListening(); showError('Le micro est indisponible ou son accès a été refusé. Vérifiez les permissions du système.'); }
-    return;
+  if (wantedListening || endingSession) return;
+  const video = options.video || null;
+  if (configured === null) await refreshConfiguration();
+  const transcribing = desktop ? (window.interpreteRecordOnly || configured === true) : configured === true;
+  // Chrome's built-in recognition stays the browser default: instant and free. Brave blocks it.
+  const builtIn = !desktop && !video && recognition && !navigator.brave && !preferServerTranscription;
+  if (builtIn) return startBrowserRecognition();
+  if (!video && !transcribing) {
+    if (desktop) { if (!await refreshConfiguration()) { toggleSettings(true); return; } }
+    else return startBrowserRecognition();
   }
+  if (!window.MediaRecorder || !navigator.mediaDevices) { showError('Ce navigateur ne permet pas d’enregistrer le son. Utilisez l’application Interprète ou saisissez le contenu ci-dessous.'); return; }
+  if (!desktop && !window.isSecureContext) { showError('Le micro nécessite une ouverture sur localhost ou une connexion HTTPS.'); return; }
+  wantedListening = true; ui.error.hidden = true; updateStatus();
+  ui['live-preview'].hidden = false;
+  const epoch = ++microphoneEpoch;
+  let stream = null;
+  if (video) {
+    videoCapture = new window.InterpreteVideo();
+    videoCapture.onEnded = () => { if (epoch === microphoneEpoch) stopListening(); };
+    try { stream = await videoCapture.open(video); }
+    catch (error) {
+      videoCapture = null; stopListening();
+      showError(error?.name === 'NotAllowedError' ? (video === 'screen' ? 'Le partage d’écran a été annulé ou refusé.' : 'La caméra n’a pas été autorisée. Vérifiez les permissions du système.') : (error?.message || 'La caméra ou l’écran est indisponible.'));
+      return;
+    }
+    if (!wantedListening || epoch !== microphoneEpoch) { videoCapture.stop(); videoCapture = null; return; }
+    window.InterpreteVideoPanel?.preview(stream);
+    videoCapture.start(); archive.recordCapture(video === 'screen' ? 'screen_video_started' : 'camera_video_started');
+  }
+  ui['live-queue'].textContent = !transcribing ? 'Vidéo en cours · transcription indisponible sans clé API.' : window.interpreteRecordOnly ? 'Enregistrement local hors ligne · aucun audio envoyé à OpenAI.' : 'Transcription par extraits de 12 secondes · audio envoyé à OpenAI.';
+  if (!transcribing) { listening = true; updateStatus(); return; }
+  const filming = videoCapture;
+  const capture = new window.InterpreteMicrophone({
+    stream,
+    transcribe: (audio, mimeType) => desktop ? desktop.transcribe(audio, mimeType) : serverTranscribe(audio, mimeType),
+    onText: (text, audioRef, meta = {}) => {
+      // The last excerpt can arrive after filming has stopped: keep the timeline of this recording.
+      const at = filming && meta.startedAt ? filming.offset(meta.startedAt) : null;
+      acceptSpeech(text, audioRef, at); ui['live-transcript'].textContent = finalPreview; scheduleLive();
+    },
+    onError: message => { archive.recordCapture('transcription_interrupted'); if (epoch === microphoneEpoch) stopListening(); showError(message); }
+  });
+  microphoneCapture = capture;
+  try {
+    await capture.start();
+    if (!wantedListening || epoch !== microphoneEpoch) { capture.stop(); return; }
+    listening = true; archive.recordCapture('microphone_started'); updateStatus();
+  } catch (error) {
+    if (error?.code === 'no-audio' && videoCapture) { microphoneCapture = null; listening = true; ui['live-queue'].textContent = 'Vidéo en cours · cette source ne transmet pas de son à transcrire.'; updateStatus(); return; }
+    stopListening(); showError('Le micro est indisponible ou son accès a été refusé. Vérifiez les permissions du système et du navigateur.');
+  }
+}
+function startBrowserRecognition() {
+  if (navigator.brave) { showError('Brave bloque la reconnaissance vocale intégrée. Ajoutez une clé API (variable OPENAI_API_KEY) ou utilisez l’application Interprète pour enregistrer.'); return; }
   if (!recognition) {
     showError('Ce navigateur ne propose pas la transcription au micro. Utilisez Chrome sur ordinateur ou saisissez le contenu ci-dessous.');
     ui.transcript.focus(); return;
@@ -395,8 +443,8 @@ async function startListening() {
   try { recognition.start(); updateStatus(); }
   catch { stopListening(); showError('Le micro n’est pas encore disponible. Réessayez dans un instant.'); }
 }
-function acceptSpeech(text, audioRef = null) {
-  pendingTranscriptIds.push(archive.recordTranscript(text, audioRef)); updateArchiveCount();
+function acceptSpeech(text, audioRef = null, videoAt = null) {
+  pendingTranscriptIds.push(archive.recordTranscript(text, audioRef, videoAt)); updateArchiveCount();
   if (!pendingSince) pendingSince = Date.now();
   pendingSpeech = `${pendingSpeech} ${text}`.trim();
   finalPreview = `${finalPreview} ${text}`.trim().slice(-600);
@@ -433,6 +481,10 @@ if (recognition) {
   };
   recognition.onerror = event => {
     if (event.error === 'no-speech' || (event.error === 'aborted' && !wantedListening)) return;
+    // The browser's speech service is unreachable or disabled: continue with the local service.
+    if ((event.error === 'network' || event.error === 'service-not-allowed') && configured === true && !preferServerTranscription) {
+      preferServerTranscription = true; stopListening(); startListening(); return;
+    }
     const messages = {
       'not-allowed': 'Le micro n’a pas été autorisé. Activez-le dans les permissions du navigateur.',
       'service-not-allowed': 'Le service de transcription est désactivé dans ce navigateur.',

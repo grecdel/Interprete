@@ -1,5 +1,5 @@
 'use strict';
-const {app, BrowserWindow, ipcMain, session, screen, dialog, shell, safeStorage, Menu, Tray, nativeImage, clipboard} = require('electron');
+const {app, BrowserWindow, ipcMain, session, screen, dialog, shell, safeStorage, Menu, Tray, nativeImage, clipboard, desktopCapturer} = require('electron');
 const {spawn} = require('node:child_process');
 const {randomBytes} = require('node:crypto');
 const fs = require('node:fs');
@@ -11,7 +11,7 @@ if (process.platform === 'linux' && process.env.DISPLAY) app.commandLine.appendS
 
 if (process.env.INTERPRETE_USER_DATA) app.setPath('userData', process.env.INTERPRETE_USER_DATA);
 let window, backend, origin, tray, floatingBounds, sessionKey = '', restarts = [];
-let unsaved = false, quitting = false, askingToQuit = false, microphoneAllowed = false;
+let unsaved = false, quitting = false, askingToQuit = false, microphoneAllowed = false, cameraAllowed = false;
 const token = randomBytes(32).toString('hex');
 const preferencesPath = () => path.join(app.getPath('userData'),'preferences.json');
 function preferences(){try{return JSON.parse(fs.readFileSync(preferencesPath(),'utf8'));}catch{return {};}}
@@ -97,6 +97,16 @@ function installIpc() {
     await fs.promises.writeFile(chosen.filePath, content, {encoding: 'utf8', mode: 0o600});
     return true;
   });
+  ipcMain.handle('interprete:video', async (event, {data, name}) => {
+    checkSender(event);
+    if (!(data instanceof Uint8Array) || !data.length || data.length > 3 * 1024 * 1024 * 1024 || typeof name !== 'string' || !/^[A-Za-z0-9._-]{1,120}\.(webm|mp4)$/.test(name)) throw new Error('Vidéo refusée.');
+    const extension = name.endsWith('.mp4') ? 'mp4' : 'webm';
+    const chosen = await dialog.showSaveDialog(window, {title: 'Enregistrer la vidéo de l’interview', defaultPath: path.join(app.getPath('videos'), name), filters: [{name: 'Vidéo', extensions: [extension]}]});
+    if (chosen.canceled || !chosen.filePath) return false;
+    const target = chosen.filePath.endsWith('.' + extension) ? chosen.filePath : chosen.filePath + '.' + extension;
+    await fs.promises.writeFile(target, data, {mode: 0o600});
+    return path.basename(target);
+  });
   ipcMain.handle('interprete:copy', (event, value) => { checkSender(event); if (typeof value !== 'string' || value.length > 10000) throw new Error('Texte refusé.'); clipboard.writeText(value); });
   ipcMain.on('interprete:panel', (event, open) => { checkSender(event); setOpen(Boolean(open)); });
   ipcMain.on('interprete:unsaved', (event, value) => { checkSender(event); unsaved = Boolean(value); });
@@ -166,14 +176,39 @@ async function createWindow() {
     {label: 'Ouvrir Interprete', click: openPanel}, {type: 'separator'}, {role: 'copy', label: 'Copier'}, {role: 'paste', label: 'Coller'}, {type: 'separator'}, {label: 'Quitter Interprete', click: () => app.quit()}
   ]).popup({window}));
   window.on('close', event => { if (!quitting) { event.preventDefault(); app.quit(); } });
-  session.defaultSession.setPermissionCheckHandler((contents, permission) => contents === window.webContents && permission === 'media' && microphoneAllowed);
+  session.defaultSession.setPermissionCheckHandler((contents, permission, _origin, details) => contents === window.webContents && permission === 'media' && (details?.mediaType === 'video' ? cameraAllowed : microphoneAllowed));
   session.defaultSession.setPermissionRequestHandler(async (contents, permission, callback, details) => {
-    if (contents !== window.webContents || permission !== 'media' || details.mediaTypes?.some(type => type !== 'audio')) return callback(false);
+    const types = details.mediaTypes || [];
+    if (contents !== window.webContents || permission !== 'media' || types.some(type => type !== 'audio' && type !== 'video')) return callback(false);
+    if (types.includes('video')) {
+      if (!cameraAllowed) {
+        const answer = await dialog.showMessageBox(window, {type: 'question', title: 'Filmer l’interview', message: 'Autoriser la caméra et le micro pour cette session ?', detail: 'La vidéo reste sur cet ordinateur tant que vous ne l’enregistrez pas. Seul le son est envoyé par extraits à OpenAI pour être transcrit ; les frais API s’appliquent.', buttons: ['Autoriser', 'Annuler'], defaultId: 0, cancelId: 1});
+        cameraAllowed = answer.response === 0; if (cameraAllowed) microphoneAllowed = true;
+      }
+      return callback(cameraAllowed);
+    }
     if (!microphoneAllowed) {
       const answer = await dialog.showMessageBox(window, {type: 'question', title: 'Écouter le reportage', message: 'Autoriser le micro pour cette session ?', detail: 'L’audio est envoyé par extraits à OpenAI pour être transcrit. Les frais API s’appliquent. Aucun fichier audio n’est conservé.', buttons: ['Autoriser le micro', 'Annuler'], defaultId: 0, cancelId: 1});
       microphoneAllowed = answer.response === 0;
     }
     callback(microphoneAllowed);
+  });
+  // Filming a screen or a window: Linux Wayland shows its own picker and returns one source;
+  // elsewhere the user chooses among the screens and windows listed here.
+  session.defaultSession.setDisplayMediaRequestHandler(async (request, callback) => {
+    try {
+      if (request.frame !== window.webContents.mainFrame) return callback({});
+      const sources = (await desktopCapturer.getSources({types: ['screen', 'window'], thumbnailSize: {width: 0, height: 0}})).filter(source => !source.name.startsWith('Interprete'));
+      if (!sources.length) return callback({});
+      let chosen = sources[0];
+      if (sources.length > 1) {
+        const shown = sources.slice(0, 8);
+        const answer = await dialog.showMessageBox(window, {type: 'question', title: 'Filmer un écran ou une fenêtre', message: 'Que voulez-vous filmer ?', detail: 'Le son de la fenêtre n’est pas toujours disponible sous Linux : le micro le remplace alors pour la transcription.', buttons: [...shown.map(source => source.name.slice(0, 60)), 'Annuler'], cancelId: shown.length});
+        if (answer.response >= shown.length) return callback({});
+        chosen = shown[answer.response];
+      }
+      callback({video: chosen});
+    } catch { callback({}); }
   });
   installIpc();
   // No default menu: its Ctrl+R would reload the page and silently drop the unexported session.

@@ -2,8 +2,9 @@
 <h1 align="center">Interprète</h1>
 <p align="center"><strong>Gardez le fil de l’interview. Retrouvez les sources. Préparez votre prochaine question.</strong></p>
 <p align="center">
-  <a href="https://github.com/grecdel/Interprete/releases/download/v0.6.0/Interprete-0.6.0-android.apk">Télécharger pour Android</a> ·
-  <a href="https://github.com/grecdel/Interprete/releases/download/v0.6.0/Interprete-0.6.0-linux-x86_64.AppImage">Télécharger pour Linux</a> ·
+  <a href="https://github.com/grecdel/Interprete/releases/download/v0.7.0/Interprete-0.7.0-android.apk">Télécharger pour Android</a> ·
+  <a href="https://github.com/grecdel/Interprete/releases/download/v0.7.0/Interprete-0.7.0-linux-x86_64.rpm">Télécharger pour Fedora</a> ·
+  <a href="https://github.com/grecdel/Interprete/releases/download/v0.7.0/Interprete-0.7.0-linux-x86_64.AppImage">Autres Linux</a> ·
   <a href="docs/INSTALLATION.md">Installation</a> ·
   <a href="docs/USAGE.md">Utilisation</a>
 </p>
@@ -87,8 +88,9 @@ Le [catalogue OSINT](docs/OSINT.md) distingue les connecteurs disponibles des se
 
 | Votre appareil | Installation |
 | --- | --- |
-| **Android 8 ou plus récent** | [Télécharger l’APK 0.6](https://github.com/grecdel/Interprete/releases/download/v0.6.0/Interprete-0.6.0-android.apk), ouvrir le fichier et autoriser l’installation depuis le navigateur si demandé. Garder Android System WebView à jour. |
-| **PC Linux x86_64** | [Télécharger l’AppImage 0.6](https://github.com/grecdel/Interprete/releases/download/v0.6.0/Interprete-0.6.0-linux-x86_64.AppImage), autoriser son exécution puis l’ouvrir. Une archive portable est aussi fournie dans la version GitHub. |
+| **Android 8 ou plus récent** | [Télécharger l’APK 0.7](https://github.com/grecdel/Interprete/releases/download/v0.7.0/Interprete-0.7.0-android.apk), ouvrir le fichier et autoriser l’installation depuis le navigateur si demandé. Garder Android System WebView à jour. |
+| **Fedora (et autres Linux RPM)** | [Télécharger le paquet 0.7](https://github.com/grecdel/Interprete/releases/download/v0.7.0/Interprete-0.7.0-linux-x86_64.rpm), l’ouvrir d’un double-clic puis choisir **Installer** dans Logiciels. Interprète apparaît ensuite dans les applications, comme les autres. |
+| **Autres PC Linux x86_64** | [Télécharger l’AppImage 0.7](https://github.com/grecdel/Interprete/releases/download/v0.7.0/Interprete-0.7.0-linux-x86_64.AppImage), autoriser son exécution puis l’ouvrir. Une archive portable est aussi fournie dans la version GitHub. |
 | **Windows, macOS, Linux ARM** | Pas d’exécutable publié et validé pour ces plateformes. Le [mode web local](docs/INSTALLATION.md#mode-web-local-windows-macos-et-linux) fonctionne avec Python ; les fonctions natives Android ne sont pas disponibles dans ce mode. |
 | **iPhone / iPad** | Pas d’application iOS publiée. L’APK Android ne s’installe pas sur iOS. |
 

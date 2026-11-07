@@ -16,6 +16,7 @@ contextBridge.exposeInMainWorld('interpreteDesktop', {
   setUnsaved: value => ipcRenderer.send('interprete:unsaved', Boolean(value)),
   saveArchive: (content, extension, name) => invoke('interprete:archive', {content, extension, name}),
   copyText: text => invoke('interprete:copy', text),
+  saveVideo: (data, name) => invoke('interprete:video', {data: new Uint8Array(data), name}),
   quit: () => ipcRenderer.send('interprete:quit'),
   onOpen: callback => { ipcRenderer.on('interprete:open', () => callback()); },
   onService: callback => { ipcRenderer.on('interprete:service', (_event, state) => callback(String(state))); },
