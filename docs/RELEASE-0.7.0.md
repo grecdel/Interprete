@@ -1,6 +1,6 @@
 # Interprète 0.7.0 — une bulle vivante, un volet épuré
 
-La bulle devient une matière vivante. Ses quatre matières suivent toujours le thème : eau, électricité violette, données numériques et fumée. Elle respire au repos, sa membrane suit la voix pendant l’écoute, elle tourne plus vite pendant l’analyse et pulse d’une teinte chaude quand une relance est prête. Sur un appareil sans processeur graphique matériel, ou si le rendu devient trop lent, l’ancienne bulle reste en place.
+La bulle devient une sphère de particules vivante, aux couleurs de chacune des cinq ambiances : une sphère en points, des rubans de fils lumineux et un anneau de poussière. Au repos, elle respire lentement ; pendant l’écoute, elle s’incline et sa surface ondule avec la voix ; pendant l’analyse, ses particules s’accélèrent et des ondes la balaient ; quand une relance est prête, elle libère une gerbe de lumière puis retrouve son calme. Sur un appareil sans processeur graphique matériel, ou si le rendu devient trop lent, une bulle simple reste en place, et la préférence système de réduction des mouvements est respectée.
 
 ## Pendant l’interview
 
@@ -32,6 +32,7 @@ La bulle devient une matière vivante. Ses quatre matières suivent toujours le 
 ## Installation
 
 - Android 8+ : installer `Interprete-0.7.0-android.apk`. La bulle au-dessus des applications utilise le nouveau rendu à partir d’Android 13.
-- Linux x86_64 : rendre `Interprete-0.7.0-linux-x86_64.AppImage` exécutable, puis le lancer.
+- Linux x86_64 : rendre `Interprete-0.7.0-linux-x86_64.AppImage` exécutable, puis le lancer. Une archive portable `.tar.gz` est également fournie.
+- Les sommes SHA-256 et les informations de signature Android accompagnent les fichiers.
 
 Prototype : les conclusions et les sources doivent être contrôlées avant un usage journalistique.

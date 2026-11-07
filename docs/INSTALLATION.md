@@ -2,7 +2,7 @@
 
 ## Android
 
-1. Télécharger [Interprete-0.6.0-android.apk](https://github.com/grecdel/Interprete/releases/download/v0.6.0/Interprete-0.6.0-android.apk).
+1. Télécharger [Interprete-0.7.0-android.apk](https://github.com/grecdel/Interprete/releases/download/v0.7.0/Interprete-0.7.0-android.apk).
 2. Ouvrir le fichier depuis Téléchargements ; autoriser l’installation depuis cette source si Android le demande.
 3. Installer comme mise à jour de la version précédente, avec la même signature, sans désinstaller pour conserver les données mémorisées. Exporter toute session en cours avant une mise à jour.
 4. Dans Réglages, renseigner la clé API OpenAI pour la transcription et les vérifications. Les connecteurs documentaires et l’OCR n’en ont pas besoin.
@@ -12,14 +12,14 @@ Android 8 minimum, Android System WebView à jour. Pas besoin de Python, de serv
 
 ## Linux x86_64
 
-Télécharger l’[AppImage 0.6](https://github.com/grecdel/Interprete/releases/download/v0.6.0/Interprete-0.6.0-linux-x86_64.AppImage), puis dans le dossier du téléchargement :
+Télécharger l’[AppImage 0.7](https://github.com/grecdel/Interprete/releases/download/v0.7.0/Interprete-0.7.0-linux-x86_64.AppImage), puis dans le dossier du téléchargement :
 
 ```sh
-chmod +x Interprete-0.6.0-linux-x86_64.AppImage
-./Interprete-0.6.0-linux-x86_64.AppImage
+chmod +x Interprete-0.7.0-linux-x86_64.AppImage
+./Interprete-0.7.0-linux-x86_64.AppImage
 ```
 
-On peut aussi autoriser l’exécution dans les propriétés du fichier, puis double-cliquer. Si AppImage/FUSE n’est pas disponible, télécharger l’archive `Interprete-0.6.0-linux-x64.tar.gz`, l’extraire et lancer `interprete` dans le dossier extrait.
+On peut aussi autoriser l’exécution dans les propriétés du fichier, puis double-cliquer. Si AppImage/FUSE n’est pas disponible, télécharger l’archive `Interprete-0.7.0-linux-x64.tar.gz`, l’extraire et lancer `interprete` dans le dossier extrait.
 
 Le serveur Python et l’interface sont embarqués. Les builds sont validés sous Ubuntu 22.04 ; la compatibilité avec toutes les distributions n’est pas certifiée. La mémorisation de la clé est proposée uniquement si le coffre système est disponible. Sous Wayland, le comportement « toujours au-dessus » dépend du gestionnaire de fenêtres. L’audio long conservé et son export ZIP restent des fonctions Android.
 
