@@ -10,6 +10,7 @@ La bulle devient une matière vivante. Ses quatre matières suivent toujours le 
 - **Sources qui se recopient** : quand plusieurs sources reprennent une même dépêche ou un même communiqué, la carte l’indique et le niveau de preuve redescend à 1.
 - **Transcription en direct sur une ligne**, dépliable d’un toucher.
 - **Relance prête sur la bulle fermée** : la question s’affiche à côté de la bulle jusqu’à la réouverture du volet.
+- **Ambiance rangée dans les Réglages** (bouton curseurs de l’en-tête) : par défaut, elle suit le mode clair ou sombre du système (Pastel ou Sombre) ; on peut aussi la fixer. Nouvelle ambiance **Feu**.
 - **Raccourcis sur ordinateur** : Espace pour écouter ou mettre en pause, Ctrl+K pour vérifier une phrase, Échap pour fermer.
 
 ## Avant et après

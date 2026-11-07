@@ -6,7 +6,7 @@
   const title=create('h2'),intro=create('p'),welcome=create('div'),choices=create('div');choices.className='launcher-choices';
   const label=create('label','Choisissez mon ambiance');const theme=create('select');theme.setAttribute('aria-label','Thème au premier lancement');
   for(const option of companion.querySelector('.theme-control select').options)theme.append(option.cloneNode(true));
-  theme.value=document.documentElement.dataset.theme||'pastel';label.append(theme);
+  theme.value=window.InterpreteTheme?.choice()||'auto';label.append(theme);
   theme.onchange=()=>{const existing=companion.querySelector('.theme-control select');existing.value=theme.value;existing.dispatchEvent(new Event('change'));};
   welcome.id='launcher-welcome';
   const done=create('button','Installer ma bulle');done.id='launcher-complete';done.type='button';welcome.append(label,create('p','Je reste discrète. Le micro ne démarre que lorsque vous choisissez Record et accordez son autorisation.'),done);
@@ -28,7 +28,7 @@
       else{setPanelOpen(true);if(action==='text')ui.transcript.focus();else if(desktop&&configured!==true){await refreshConfiguration();if(!configured)toggleSettings(true);}}
     };choices.append(button);
   }
-  done.onclick=async()=>{done.disabled=true;try{if(desktop?.completeOnboarding)await desktop.completeOnboarding(theme.value);else {try{localStorage.setItem('interprete-onboarded','yes');}catch{ /* Session-only welcome if storage is unavailable. */ }}onboarded=true;closeMenu();}catch{intro.textContent='Le choix n’a pas pu être mémorisé. Réessayez.';}finally{done.disabled=false;}};
+  done.onclick=async()=>{done.disabled=true;try{try{localStorage.setItem('interprete-theme',theme.value);}catch{ /* The choice stays for this session. */ }if(desktop?.completeOnboarding)await desktop.completeOnboarding(window.InterpreteTheme?.resolved()||document.documentElement.dataset.theme||'pastel');else {try{localStorage.setItem('interprete-onboarded','yes');}catch{ /* Session-only welcome if storage is unavailable. */ }}onboarded=true;closeMenu();}catch{intro.textContent='Le choix n’a pas pu être mémorisé. Réessayez.';}finally{done.disabled=false;}};
   close.onclick=closeMenu;
   orb.onclick=show;
   document.getElementById('open-assistant').onclick=show;
@@ -38,7 +38,8 @@
   document.body.classList.add('companion-mode');hidePanel();
   (async()=>{
     try{const settings=desktop?await desktop.settings():{};onboarded=desktop?Boolean(settings.onboardingComplete):localStorage.getItem('interprete-onboarded')==='yes';
-      if(settings.theme){theme.value=settings.theme;theme.onchange();}
+      if(settings.theme&&onboarded&&window.InterpreteTheme?.stored()==null){ // 0.6 installs: keep the ambiance chosen at onboarding.
+theme.value=settings.theme;theme.onchange();}
     }catch{onboarded=false;}
     ready=true;if(onboarded)closeMenu();else show();
   })();

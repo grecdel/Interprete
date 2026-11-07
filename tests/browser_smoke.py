@@ -125,6 +125,7 @@ class BrowserChecks(unittest.TestCase):
         expect(canvas).to_be_visible()
         expect(self.page.locator('#bubble .bubble-face')).to_be_hidden()
         frames = set()
+        self.page.locator('#settings-button').click()  # UI2: the ambiance lives in the settings tray.
         for theme in ['pastel', 'dark', 'matrix', 'investigation', 'fire']:
             self.page.locator('.theme-control select').select_option(theme)
             self.page.wait_for_timeout(120)
@@ -140,6 +141,24 @@ class BrowserChecks(unittest.TestCase):
         self.page.wait_for_timeout(300)
         self.assertEqual(still, canvas.screenshot())
         self.page.emulate_media(reduced_motion='no-preference')
+
+    def test_ambiance_in_settings_follows_system_by_default(self):
+        # UI2: no ambiance control in the panel header; the settings tray offers it, "Automatique" first.
+        expect(self.page.locator('.panel-header + .theme-control')).to_have_count(0)
+        self.page.locator('#settings-button').click()
+        select = self.page.locator('#settings-tray .theme-control select')
+        expect(select).to_have_value('auto')
+        expect(self.page.locator('#key-settings')).to_be_hidden()
+        html = self.page.locator('html')
+        expect(html).to_have_attribute('data-theme', 'pastel')
+        self.page.emulate_media(color_scheme='dark')
+        expect(html).to_have_attribute('data-theme', 'dark')
+        select.select_option('investigation')
+        self.page.emulate_media(color_scheme='light')
+        expect(html).to_have_attribute('data-theme', 'investigation')
+        self.page.reload()
+        expect(html).to_have_attribute('data-theme', 'investigation')
+        self.page.keyboard.press('Escape')
 
     def test_orb_keeps_css_bubble_on_software_gpu(self):
         # Without the opt-in, a software renderer (SwiftShader here) keeps the light CSS bubble.

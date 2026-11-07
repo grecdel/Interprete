@@ -515,14 +515,14 @@ ui['import-archive'].onchange = async event => {
 
 function toggleSettings(open) {
   ui['settings-tray'].hidden = !open; ui['settings-button'].setAttribute('aria-expanded', String(open));
-  if (open) { toggleArchive(false); ui['api-key'].focus(); }
+  if (open) { toggleArchive(false); (desktop ? ui['api-key'] : ui['settings-tray'].querySelector('select'))?.focus(); }
 }
+ui['settings-button'].onclick = () => toggleSettings(ui['settings-tray'].hidden);
 if (desktop) {
   document.documentElement.classList.add('desktop-root');
   document.body.classList.add('desktop-mode');
-  ui['settings-button'].hidden = false; ui['quit-desktop'].hidden = false;
+  document.getElementById('key-settings').hidden = false; ui['quit-desktop'].hidden = false;
   ui.detach.hidden = true;
-  ui['settings-button'].onclick = () => toggleSettings(ui['settings-tray'].hidden);
   ui['quit-desktop'].onclick = () => desktop.quit();
   desktop.onOpen(() => { if(!window.InterpreteLauncher)setPanelOpen(true); });
   desktop.onService?.(state => {
@@ -584,24 +584,37 @@ updateComposer();
 refreshConfiguration().then(() => { scheduleLive(); });
 
 // Appearance preferences contain no interview data or API credentials.
+// UI2: the ambiance lives in the settings tray and follows the system (light → Pastel, dark → Sombre) by default.
 (() => {
   const themes = {pastel: 'Pastel', dark: 'Sombre', matrix: 'Matrix', investigation: 'Enquête', fire: 'Feu'};
+  const scheme = matchMedia('(prefers-color-scheme: dark)');
   const label = document.createElement('label'); label.className = 'theme-control';
   label.textContent = 'Ambiance ';
   const select = document.createElement('select'); select.setAttribute('aria-label', 'Thème de l’interface');
-  for (const [value, text] of Object.entries(themes)) {
+  for (const [value, text] of [['auto', 'Automatique (système)'], ...Object.entries(themes)]) {
     const option = document.createElement('option'); option.value = value; option.textContent = text; select.append(option);
   }
+  const hint = document.createElement('p'); hint.className = 'settings-hint';
+  const stored = () => { try { return localStorage.getItem('interprete-theme'); } catch { return null; } };
+  const valid = value => value === 'auto' || Object.hasOwn(themes, value);
+  let choice = valid(stored()) ? stored() : 'auto';
+  const resolve = value => value === 'auto' ? (scheme.matches ? 'dark' : 'pastel') : value;
+  let current = '';
   function apply(value, notify = true) {
-    const theme = Object.hasOwn(themes, value) ? value : 'pastel';
-    document.documentElement.dataset.theme = theme; companion.ownerDocument.documentElement.dataset.theme = theme; select.value = theme;
-    if(notify)window.interpreteDesktop?.setTheme?.(theme)?.catch(() => {});
+    choice = valid(value) ? value : 'auto'; select.value = choice;
+    const theme = resolve(choice);
+    hint.textContent = choice === 'auto' ? `Suit le réglage clair ou sombre du système : ${themes[theme]} en ce moment.` : 'Ambiance fixe, quel que soit le réglage du système.';
+    document.documentElement.dataset.theme = theme; companion.ownerDocument.documentElement.dataset.theme = theme;
+    if (notify && theme !== current) window.interpreteDesktop?.setTheme?.(theme)?.catch(() => {});
+    current = theme;
     document.querySelector('meta[name="theme-color"]')?.setAttribute('content', theme === 'pastel' ? '#f3eff9' : theme === 'matrix' ? '#030c08' : theme === 'fire' ? '#140c0a' : '#10131d');
   }
-  let saved = 'pastel'; try { saved = localStorage.getItem('interprete-theme') || saved; } catch {}
-  apply(saved, false);
-  select.onchange = () => { apply(select.value); try { localStorage.setItem('interprete-theme', select.value); } catch {} };
-  label.append(select); document.querySelector('.panel-header').after(label);
+  apply(choice, false);
+  scheme.addEventListener?.('change', () => { if (choice === 'auto') apply('auto'); });
+  select.onchange = () => { apply(select.value); try { localStorage.setItem('interprete-theme', choice); } catch {} };
+  // Native shells only store concrete themes; the launcher asks here whether a stored native theme should win.
+  window.InterpreteTheme = Object.freeze({ choice: () => choice, stored: () => (valid(stored()) ? stored() : null), resolved: () => resolve(choice) });
+  label.append(select); document.getElementById('appearance-settings').append(label, hint);
 })();
 
 (() => {

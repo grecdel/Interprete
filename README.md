@@ -30,7 +30,7 @@ Sur grand écran, le volet vise environ un quart de la largeur, avec une largeur
 | --- | --- |
 | **Bulle** | Fermée, elle ouvre l’assistant et affiche la relance prête. Volet ouvert, elle démarre ou met en pause l’écoute (aussi avec Espace sur ordinateur). Sa matière respire, suit la voix et signale l’analyse. |
 | **En-tête** | Accéder aux réglages et à l’archive, ou réduire le volet. Réduire le volet arrête le micro. |
-| **Ambiance** | Choisir pastel, sombre, Matrix ou enquête. La bulle s’accorde au thème. |
+| **Ambiance** | Dans les Réglages : automatique (clair ou sombre selon le système) par défaut, ou pastel, sombre, Matrix, enquête, feu. La bulle s’accorde au thème. |
 | **Micro** | Écouter une interview ou un reportage diffusé près du micro. La transcription en direct tient sur une ligne, dépliable. Les options de conservation audio sont disponibles sur Android. |
 | **Fil des vérifications** | Lire les affirmations examinées, leur niveau de preuve, les réserves, les sources et les questions de relance. Une relance provisoire apparaît d’abord, puis la vérification sourcée. |
 | **Zone de saisie** | Vérifier une phrase, un extrait d’article ou un lien public, sans passer par le micro. |

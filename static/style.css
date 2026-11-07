@@ -49,7 +49,7 @@ h1 span { color: #9597a6; }
 .panel-identity p { color: var(--muted); font-size: 11px; line-height: 1.5; margin: 3px 0 0; }
 .header-actions { display: flex; gap: 2px; align-self: flex-start; }
 .icon-button { display: grid; place-items: center; width: 27px; height: 28px; border: 0; border-radius: 7px; background: transparent; color: #8d8f9b; padding: 0; flex-shrink: 0; }
-.icon-button:hover { background: #eeeef5; color: #5c5881; }.icon-button:disabled { opacity: .35; }.icon-button .icon { width: 16px; height: 16px; }
+.icon-button:hover, .icon-button[aria-expanded="true"] { background: color-mix(in srgb, var(--ink, #5c5881) 10%, transparent); color: var(--ink, #5c5881); }.icon-button:disabled { opacity: .35; }.icon-button .icon { width: 16px; height: 16px; }
 .live-section { padding: 0 16px 16px; border-bottom: 1px solid var(--line); }
 .listen-button { border: 1px solid #e7e6f1; border-radius: 13px; background: #f4f3fa; padding: 12px 10px; width: 100%; display: flex; align-items: center; gap: 9px; text-align: left; transition: border-color .2s, background .2s; }
 .listen-button:hover { border-color: #c7c3e8; background: #eeecf8; }
@@ -140,7 +140,12 @@ textarea { display: block; resize: none; border: 0; outline: none; color: #58536
 .settings-tray .remember-key input { accent-color: #9981b2; margin-top: 4px; }
 .settings-tray form p { font-size: 10px; line-height: 1.7; color: #9c8aa8; }
 .settings-tray button[type=submit] { background: #8d77a5; color: white; border: 0; border-radius: 7px; width: 100%; padding: 11px; font-size: 12px; margin: 8px 0; }
-.settings-tray button:disabled { opacity: .5; }.settings-tray>a { font-size: 10px; color: #9d83b3; }
+.settings-tray button:disabled { opacity: .5; }.settings-tray a { font-size: 10px; color: #9d83b3; }
+.settings-group + .settings-group { margin-top: 18px; padding-top: 14px; border-top: 1px solid var(--line, #e4dcec); }
+.settings-tray .archive-title { margin-bottom: 12px; }
+.settings-group h3 { margin: 0 0 8px; font-size: 11px; letter-spacing: .06em; text-transform: uppercase; color: var(--muted, #8b7a98); font-weight: 600; }
+.settings-tray .theme-control { display: flex; padding: 0; margin: 0; border: 0; font-size: 12px; color: var(--ink, #4f4259); }
+.settings-tray .settings-hint { margin: 6px 0 0; font-size: 11px; line-height: 1.5; color: var(--muted, #8b7a98); }
 @media(max-height:540px) { .desktop-mode .assistant-panel { bottom: 78px; }.desktop-mode .live-section { padding-bottom: 8px; }.desktop-mode .feed { min-height: 50px; }.desktop-mode .panel-header { padding-bottom: 12px; }.desktop-mode .quit-desktop { padding-bottom: 7px; } }
 
 /* Theme surfaces and a slow, organic bloom; no flashing or strobing. */
