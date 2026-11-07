@@ -50,6 +50,8 @@
       ],
       "category": "Utility",
       "synopsis": "Assistant de vérification journalistique",
+      "maintainer": "Grec Del (https://github.com/grecdel/Interprete)",
+      "vendor": "Interprete",
       "icon": "docs/assets/icon.png",
       "syncDesktopName": true
     },
