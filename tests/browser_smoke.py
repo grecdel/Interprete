@@ -56,7 +56,7 @@ class BrowserChecks(unittest.TestCase):
         cls.playwright = sync_playwright().start()
         cls.browser = cls.playwright.chromium.launch(
             executable_path=os.environ.get('CHROMIUM_PATH', '/usr/bin/chromium'),
-            headless=True, args=['--no-sandbox', '--window-size=1440,960'])
+            headless=True, args=['--no-sandbox', '--window-size=1440,960', '--use-fake-device-for-media-stream', '--use-fake-ui-for-media-stream'])
         cls.artifacts = tempfile.TemporaryDirectory(prefix='interprete-browser-')
 
     @classmethod
@@ -159,6 +159,56 @@ class BrowserChecks(unittest.TestCase):
         self.page.reload()
         expect(html).to_have_attribute('data-theme', 'investigation')
         self.page.keyboard.press('Escape')
+
+    def transcribe_route(self, route):
+        self.transcribed.append(route.request.headers.get('content-type', ''))
+        route.fulfill(json={'text': f'Phrase transcrite numéro {len(self.transcribed)} sur le budget de la ville.'})
+
+    def test_brave_records_through_local_transcription(self):
+        # Brave blocks the browser's speech service: recording goes through /api/transcribe instead.
+        self.transcribed = []
+        self.page.route('**/api/transcribe', self.transcribe_route)
+        self.page.evaluate("Object.defineProperty(navigator, 'brave', {value: {}, configurable: true}); window.InterpreteMicrophone.chunkMs = 700")
+        self.page.locator('#microphone').click()
+        expect(self.page.locator('#live-transcript')).to_contain_text('Phrase transcrite', timeout=8000)
+        self.assertTrue(self.transcribed[0].startswith('audio/'))
+        expect(self.page.locator('#microphone')).to_have_attribute('aria-pressed', 'true')
+        self.page.locator('#microphone').click()
+        expect(self.page.locator('#microphone')).to_have_attribute('aria-pressed', 'false')
+
+    def test_video_interview_is_filmed_reviewed_and_linked_in_report(self):
+        self.transcribed = []
+        self.page.route('**/api/transcribe', self.transcribe_route)
+        self.page.evaluate("window.InterpreteMicrophone.chunkMs = 700")
+        self.page.locator('#tools-button').click()
+        self.page.locator('#video-tools [data-video=camera]').click()
+        expect(self.page.locator('#video-live')).to_be_visible()
+        expect(self.page.locator('#live-transcript')).to_contain_text('numéro 2', timeout=10000)
+        self.page.locator('#video-live .video-stop').click()
+        expect(self.page.locator('#video-ready')).to_be_visible(timeout=5000)
+        expect(self.page.locator('#video-live')).to_be_hidden()
+        self.page.locator('.video-review').click()
+        lines = self.page.locator('#video-dialog .video-lines li')
+        expect(lines.first).to_contain_text('Phrase transcrite')
+        self.assertTrue(self.page.evaluate("document.querySelector('#video-dialog video').src.startsWith('blob:')"))
+        lines.nth(1).click()
+        self.page.wait_for_timeout(300)
+        self.assertGreaterEqual(self.page.evaluate("document.querySelector('#video-dialog video').currentTime"), 0)
+        self.page.keyboard.press('Escape')
+        expect(self.page.locator('#video-dialog')).to_be_hidden()
+        with self.page.expect_download() as download:
+            self.page.locator('.video-save').click()
+        self.assertTrue(download.value.suggested_filename.startswith('Interprete-interview-'))
+        self.assertTrue(download.value.suggested_filename.endswith('.webm'))
+        expect(self.page.locator('.video-status')).to_contain_text('Vidéo enregistrée')
+        data = self.page.evaluate("window.InterpreteArchive.snapshot()")
+        self.assertEqual(data['video']['file_name'], download.value.suggested_filename)
+        self.assertTrue(all(isinstance(item.get('video_at'), (int, float)) for item in data['transcript']))
+        viewer = self.context.new_page(); viewer.on('pageerror', lambda error: self.errors.append(str(error)))
+        viewer.set_content(self.page.evaluate("window.InterpreteArchive.htmlDocument(window.InterpreteArchive.snapshot())"))
+        expect(viewer.locator('.video-box video')).to_have_count(1)
+        expect(viewer.locator('.video-jump').first).to_contain_text('▶ 00:0')
+        viewer.close()
 
     def test_orb_keeps_css_bubble_on_software_gpu(self):
         # Without the opt-in, a software renderer (SwiftShader here) keeps the light CSS bubble.
