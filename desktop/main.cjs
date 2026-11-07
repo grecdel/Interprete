@@ -10,13 +10,13 @@ const {API_PATHS, validKey, externalUrl, panelBounds, bubbleBounds} = require('.
 if (process.platform === 'linux' && process.env.DISPLAY) app.commandLine.appendSwitch('ozone-platform', 'x11');
 
 if (process.env.INTERPRETE_USER_DATA) app.setPath('userData', process.env.INTERPRETE_USER_DATA);
-let window, backend, origin, tray, floatingBounds;
+let window, backend, origin, tray, floatingBounds, sessionKey = '', restarts = [];
 let unsaved = false, quitting = false, askingToQuit = false, microphoneAllowed = false;
 const token = randomBytes(32).toString('hex');
 const preferencesPath = () => path.join(app.getPath('userData'),'preferences.json');
 function preferences(){try{return JSON.parse(fs.readFileSync(preferencesPath(),'utf8'));}catch{return {};}}
 function savePreferences(value){fs.mkdirSync(app.getPath('userData'),{recursive:true,mode:0o700});fs.writeFileSync(preferencesPath(),JSON.stringify(value),{mode:0o600});}
-function validTheme(theme){if(!['pastel','dark','matrix','investigation'].includes(theme))throw new Error('Thème inconnu.');return theme;}
+function validTheme(theme){if(!['pastel','dark','matrix','investigation','fire'].includes(theme))throw new Error('Thème inconnu.');return theme;}
 const credentialsPath = () => path.join(app.getPath('userData'), 'credentials.bin');
 const workArea = () => screen.getDisplayNearestPoint(screen.getCursorScreenPoint()).workArea;
 function secureStorageAvailable() {
@@ -38,7 +38,12 @@ async function serviceRequest(apiPath, data, mimeType) {
     headers['Content-Type'] = mimeType || 'application/json';
     body = mimeType ? data : JSON.stringify(data);
   }
-  const response = await fetch(origin + apiPath, {method: body === undefined ? 'GET' : 'POST', headers, body, signal: AbortSignal.timeout(95000)});
+  let response;
+  try {
+    response = await fetch(origin + apiPath, {method: body === undefined ? 'GET' : 'POST', headers, body, signal: AbortSignal.timeout(95000)});
+  } catch (error) {
+    throw new Error(error?.name === 'TimeoutError' ? 'Délai de recherche dépassé. Réessayez avec un extrait plus court.' : 'Le service local ne répond pas. Réessayez dans quelques secondes.');
+  }
   return {ok: response.ok, status: response.status, body: await response.json()};
 }
 function setOpen(open) {
@@ -75,6 +80,7 @@ function installIpc() {
     if (remember && !secureStorageAvailable()) throw new Error('Le coffre de votre système est indisponible. Utilisez la clé pour cette session seulement.');
     const result = await serviceRequest('/api/desktop/key', {key: key.trim()});
     if (!result.ok) throw new Error(result.body.error || 'Impossible de configurer la clé.');
+    sessionKey = key.trim();
     if (remember) {
       fs.mkdirSync(app.getPath('userData'), {recursive: true, mode: 0o700});
       fs.writeFileSync(credentialsPath(), safeStorage.encryptString(key.trim()), {mode: 0o600});
@@ -102,18 +108,19 @@ async function startBackend() {
   const command = isDevelopment ? (process.env.INTERPRETE_PYTHON || (process.platform === 'win32' ? 'python' : 'python3')) : executable;
   const args = isDevelopment ? [path.join(__dirname, '..', 'desktop_backend.py')] : [];
   const env = {...process.env, INTERPRETE_DESKTOP_TOKEN: token, PYTHONUNBUFFERED: '1'};
-  if (!env.INTERPRETE_API_KEY && !env.OPENAI_API_KEY) {
-    const key = loadSavedKey(); if (key) env.INTERPRETE_API_KEY = key;
-  }
-  backend = spawn(command, args, {env, windowsHide: true, stdio: ['pipe', 'pipe', 'pipe']});
+  if (origin) env.INTERPRETE_DESKTOP_PORT = new URL(origin).port;
+  // The saved key is sent over the authenticated local route, not left in the process environment.
+  const key = env.INTERPRETE_API_KEY || env.OPENAI_API_KEY ? '' : (sessionKey || loadSavedKey());
+  const child = spawn(command, args, {env, windowsHide: true, stdio: ['pipe', 'pipe', 'pipe']});
   // Do not forward process output: HTTP errors or future dependencies may contain secrets.
-  backend.stderr.on('data', () => {});
+  backend = child;
+  child.stderr.on('data', () => {});
   await new Promise((resolve, reject) => {
     let output = '';
     const timeout = setTimeout(() => reject(new Error('Le service local met trop de temps à démarrer.')), 30000);
-    backend.once('error', () => { clearTimeout(timeout); reject(new Error('Le service local n’a pas pu démarrer.')); });
-    backend.once('exit', () => { clearTimeout(timeout); reject(new Error('Le service local s’est arrêté avant son démarrage.')); });
-    backend.stdout.on('data', chunk => {
+    child.once('error', () => { clearTimeout(timeout); reject(new Error('Le service local n’a pas pu démarrer.')); });
+    child.once('exit', () => { clearTimeout(timeout); reject(new Error('Le service local s’est arrêté avant son démarrage.')); });
+    child.stdout.on('data', chunk => {
       output += chunk.toString();
       for (const line of output.split('\n').slice(0, -1)) {
         try {
@@ -126,6 +133,20 @@ async function startBackend() {
       output = output.slice(output.lastIndexOf('\n') + 1).slice(-4096);
     });
   });
+  if (key) { try { await serviceRequest('/api/desktop/key', {key}); } catch { /* The settings screen will ask for the key again. */ } }
+  child.once('exit', () => { if (!quitting && backend === child) restartBackend(); });
+}
+// A crashed service is restarted on the same port so the open page keeps working; the user is told either way.
+async function restartBackend() {
+  const now = Date.now(); restarts = restarts.filter(time => now - time < 120000); restarts.push(now);
+  const notify = state => { if (window && !window.isDestroyed()) window.webContents.send('interprete:service', state); };
+  if (restarts.length > 3) { notify('failed'); return; }
+  notify('restarting');
+  try {
+    await startBackend();
+    if (window && !window.isDestroyed() && !window.webContents.getURL().startsWith(origin + '/')) await window.loadURL(origin + '/');
+    notify('ready');
+  } catch { notify('failed'); }
 }
 function openPanel() {
   window.show(); window.webContents.send('interprete:open'); window.focus();
@@ -136,7 +157,7 @@ async function createWindow() {
     ...bubbleBounds(area), minWidth: 90, minHeight: 90, frame: false, transparent: true,
     backgroundColor: '#00000000', alwaysOnTop: true, resizable: false, show: false,
     title: 'Interprete', icon: path.join(app.getAppPath(), 'docs/assets/icon.png'),
-    webPreferences: {preload: path.join(__dirname, 'preload.cjs'), contextIsolation: true, nodeIntegration: false, sandbox: true, webSecurity: true, backgroundThrottling: false}
+    webPreferences: {preload: path.join(__dirname, 'preload.cjs'), contextIsolation: true, nodeIntegration: false, sandbox: true, webSecurity: true, backgroundThrottling: false, devTools: !app.isPackaged}
   });
   window.webContents.setWindowOpenHandler(({url}) => { const safe = externalUrl(url); if (safe) shell.openExternal(safe); return {action: 'deny'}; });
   window.webContents.on('will-navigate', (event, url) => { if (url !== origin + '/' && !url.startsWith(origin + '/#')) event.preventDefault(); });
@@ -155,6 +176,12 @@ async function createWindow() {
     callback(microphoneAllowed);
   });
   installIpc();
+  // No default menu: its Ctrl+R would reload the page and silently drop the unexported session.
+  Menu.setApplicationMenu(null);
+  window.webContents.on('before-input-event', (event, input) => {
+    const key = String(input.key || '').toLowerCase();
+    if (input.type === 'keyDown' && (key === 'f5' || ((input.control || input.meta) && key === 'r'))) event.preventDefault();
+  });
   window.once('ready-to-show', () => window.show());
   await window.loadURL(origin + '/');
   try {

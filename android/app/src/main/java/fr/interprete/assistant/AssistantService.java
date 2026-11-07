@@ -87,6 +87,8 @@ public final class AssistantService extends Service {
             }
             public void text(String text) { if (!destroyed) { if (wakeLock.isHeld()) wakeLock.acquire(60 * 60 * 1000L); app.emit(Json.object("event", "text", "text", text)); } }
             public void error(String message) { if (!destroyed) { app.reject(startRequest, message); app.emit(Json.object("event", "microphoneError", "message", message)); } }
+            // The web bubble follows the real voice while the app is on screen (about 10 times per second).
+            @Override public void level(float value) { if (!destroyed && app.activityVisible) app.emit(Json.object("event", "level", "value", Math.round(value * 100) / 100.0)); }
             public void drained() { main.post(() -> { if (!destroyed) { releaseWakeLock(); foreground(false); stopIfIdle(); } }); }
         });
         engine.configure(intent.getLongExtra("duration_ms",180*60*1000L),intent.getBooleanExtra("record_only",false));
@@ -107,7 +109,12 @@ public final class AssistantService extends Service {
                 Intent open = new Intent(AssistantService.this, MainActivity.class).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_SINGLE_TOP);
                 open.putExtra("listen_on_open", engine == null || !engine.isRecording()); open.putExtra("listen_token", app.launchToken); startActivity(open);
             });
-            BloomDrawable background = new BloomDrawable(getSharedPreferences("preferences",MODE_PRIVATE).getString("theme","pastel"));
+            BloomDrawable background = new BloomDrawable(this, getSharedPreferences("preferences",MODE_PRIVATE).getString("theme","pastel"), new BloomDrawable.State() {
+                @Override public boolean listening() { return engine != null && engine.isRecording(); }
+                @Override public float level() { return engine != null ? engine.level() : 0f; }
+            });
+            // The shader draws the whole material: the static icon would only cover it.
+            if (background.usesShader()) bubble.setImageDrawable(null);
             bubble.setBackground(background); bubble.setPadding(dp(16), dp(16), dp(16), dp(16)); bubble.setElevation(dp(6));
             position = new WindowManager.LayoutParams(dp(62), dp(62), WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY, WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE, PixelFormat.TRANSLUCENT);
             position.gravity = Gravity.TOP | Gravity.START;

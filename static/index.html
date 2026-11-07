@@ -13,6 +13,8 @@
   <script src="/workspace.js" defer></script>
   <script src="/analysis-tools.js" defer></script>
   <script src="/launcher.js" defer></script>
+  <script src="/panel.js" defer></script>
+  <script src="/orb.js" defer></script>
 </head>
 <body>
   <svg class="icon-library" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
@@ -49,14 +51,16 @@
       <header class="panel-header">
         <div class="panel-identity"><span class="small-orb" aria-hidden="true"></span><div><h2>Interprete</h2><p id="status" role="status" aria-live="polite">À votre écoute, à votre rythme</p></div></div>
         <div class="header-actions">
-          <button id="settings-button" class="icon-button" aria-label="Réglages et clé API" aria-expanded="false" aria-controls="settings-tray" title="Réglages et clé API" hidden><svg class="icon"><use href="#i-settings"/></svg></button>
+          <button id="settings-button" class="icon-button" aria-label="Réglages" aria-expanded="false" aria-controls="settings-tray" title="Réglages : ambiance et clé API"><svg class="icon"><use href="#i-settings"/></svg></button>
           <button id="archive-button" class="icon-button" aria-label="Archive et compte rendu de l’interview" aria-expanded="false" aria-controls="archive-tray" title="Archive et carte des connexions"><svg class="icon"><use href="#i-archive"/></svg></button>
           <button id="detach" class="icon-button" aria-label="Ouvrir en fenêtre flottante" title="Rester au-dessus des autres applications"><svg class="icon"><use href="#i-popout"/></svg></button>
           <button id="collapse" class="icon-button" aria-label="Réduire Interprete et arrêter le micro" title="Réduire et arrêter le micro"><svg class="icon"><use href="#i-close"/></svg></button>
         </div>
       </header>
       <section id="settings-tray" class="archive-tray settings-tray" aria-label="Réglages d’Interprete" hidden>
-        <div class="archive-title"><strong>Votre clé, votre assistant.</strong></div>
+        <div class="archive-title"><strong>Réglages</strong></div>
+        <div id="appearance-settings" class="settings-group"><h3>Apparence</h3></div>
+        <div id="key-settings" class="settings-group" hidden><h3>Votre clé, votre assistant</h3>
         <p>Collez votre clé API OpenAI ici. Les recherches et la transcription sont facturées sur votre compte API.</p>
         <form id="key-form"><label for="api-key">Clé API OpenAI</label><input id="api-key" type="password" autocomplete="off" spellcheck="false" placeholder="sk-…" required>
           <label class="remember-key"><input type="checkbox" id="remember-key"> Mémoriser dans le coffre de ce système</label>
@@ -65,6 +69,7 @@
         </form>
         <p id="settings-status" role="status" aria-live="polite"></p>
         <a href="https://platform.openai.com/api-keys" target="_blank" rel="noopener noreferrer">Créer une clé sur OpenAI ↗</a>
+        </div>
       </section>
       <section id="archive-tray" class="archive-tray" aria-label="Archive de session" hidden>
         <div class="archive-title"><strong>La mémoire de l’interview</strong><span id="archive-count">0 propos transcrit</span></div>

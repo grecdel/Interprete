@@ -102,9 +102,24 @@ final class ClaimNormalizer {
                 String summary = Json.string(check, "summary", 3000), followUp = Json.string(check, "follow_up", 1500);
                 JSONArray evidence = strings(check.optJSONArray("evidence"), 3, 1500);
                 if (attached.length() == 0) {
-                    if (!"Informations insuffisantes".equals(verdict)) summary = "Cette conclusion n’a pas de source associée et ne peut pas être retenue sans vérification.";
+                    if (!"Informations insuffisantes".equals(verdict)) summary = "Cette conclusion n’a pas de source web associée et ne peut pas être retenue sans vérification.";
                     verdict = "Informations insuffisantes"; evidence = new JSONArray();
                     followUp = "Pouvez-vous préciser la source, la date et le périmètre de cette affirmation ?";
+                }
+                JSONArray limitations = strings(check.optJSONArray("limitations"), 3, 1000);
+                Set<String> hosts = new HashSet<>();
+                for (int n = 0; n < attached.length(); n++) hosts.add(URI.create(attached.optJSONObject(n).optString("url")).getHost());
+                if (hosts.size() == 1) {
+                    JSONArray withWarning = Json.array("Un seul site cité : le recoupement reste à compléter.");
+                    for (int n = 0; n < limitations.length(); n++) withWarning.put(limitations.opt(n));
+                    limitations = withWarning;
+                }
+                JSONObject origin = check.optJSONObject("common_origin");
+                String commonOrigin = origin != null && Boolean.TRUE.equals(origin.opt("detected")) && attached.length() >= 2 ? Json.string(origin, "explanation", 600).trim() : "";
+                if (!commonOrigin.isEmpty()) {
+                    JSONArray withOrigin = Json.array("Origine commune probable : " + commonOrigin);
+                    for (int n = 0; n < limitations.length(); n++) withOrigin.put(limitations.opt(n));
+                    limitations = withOrigin;
                 }
                 JSONArray connections = new JSONArray(), proposed = check.optJSONArray("connections");
                 if (proposed != null) for (int n = 0; n < Math.min(4, proposed.length()); n++) {
@@ -121,13 +136,54 @@ final class ClaimNormalizer {
                 checks.put(Json.object("claim", Json.string(check, "claim", 500), "verdict", verdict, "summary", summary,
                         "reasoning", Json.string(check, "reasoning", 5000), "evidence", evidence, "sources", attached,
                         "connections", connections, "follow_up", followUp, "source_excerpts", excerpts,
-                        "limitations", strings(check.optJSONArray("limitations"), 3, 1000), "review_required", true));
+                        "limitations", limitations, "review_required", true));
+                if (!commonOrigin.isEmpty()) checks.getJSONObject(checks.length() - 1).put("common_origin", commonOrigin);
             }
         }
         JSONArray allSources = new JSONArray(); for (JSONObject source : sources.values()) allSources.put(source);
         String message = Json.string(analysis, "message", 3000);
         if (message.isEmpty()) message = "Aucune affirmation vérifiable n’a été identifiée.";
         return Json.object("checks", checks, "sources", allSources, "has_sources", !sources.isEmpty(), "analysis", message, "input_type", inputType, "checked_at", java.time.Instant.now().toString());
+    }
+    /** F3: the journalist's preparation, bounded; context for the model, never evidence. */
+    static JSONObject preparation(JSONObject value) {
+        JSONObject result = new JSONObject(); if (value == null) return result;
+        try {
+            for (String[] field : new String[][]{{"interlocuteur", "200"}, {"fonction", "200"}, {"sujet", "400"}, {"date", "40"}}) {
+                String text = Json.string(value, field[0], Integer.parseInt(field[1])).trim(); if (!text.isEmpty()) result.put(field[0], text);
+            }
+            JSONArray pieces = value.optJSONArray("pieces"), kept = new JSONArray();
+            if (pieces != null) for (int i = 0; i < Math.min(3, pieces.length()); i++) {
+                JSONObject piece = pieces.optJSONObject(i); if (piece == null) continue;
+                String excerpt = Json.string(piece, "extrait", 1500).trim(); if (excerpt.isEmpty()) continue;
+                kept.put(Json.object("nom", Json.string(piece, "nom", 200).trim(), "extrait", excerpt));
+            }
+            if (kept.length() > 0) result.put("pieces", kept);
+        } catch (Exception ignored) { return new JSONObject(); }
+        return result;
+    }
+    /** F4: provisional follow-ups, never presented as verified. */
+    static JSONObject quick(JSONObject response) throws Exception {
+        if (!"completed".equals(response.optString("status"))) throw new IllegalStateException("La relance rapide est incomplète.");
+        StringBuilder text = new StringBuilder(); JSONArray output = response.optJSONArray("output");
+        if (output != null) for (int i = 0; i < output.length(); i++) {
+            JSONObject item = output.optJSONObject(i); if (item == null || !"message".equals(item.optString("type"))) continue;
+            JSONArray content = item.optJSONArray("content"); if (content == null) continue;
+            for (int n = 0; n < content.length(); n++) { JSONObject part = content.optJSONObject(n); if (part != null && "output_text".equals(part.optString("type"))) text.append(part.optString("text", "")); }
+        }
+        JSONObject analysis;
+        try { analysis = new JSONObject(text.toString().trim().replaceFirst("^```(?:json)?\\s*", "").replaceFirst("\\s*```$", "")); }
+        catch (Exception ignored) { throw new IllegalStateException("La relance rapide est inexploitable."); }
+        JSONArray values = analysis.optJSONArray("checks"), checks = new JSONArray();
+        if (values != null) for (int i = 0; i < Math.min(6, values.length()) && checks.length() < 2; i++) {
+            JSONObject check = values.optJSONObject(i); if (check == null) continue;
+            String claim = Json.string(check, "claim", 500), followUp = Json.string(check, "follow_up", 600);
+            if (claim.trim().isEmpty() || followUp.trim().isEmpty()) continue;
+            String why = Json.string(check, "why", 600); if (why.trim().isEmpty()) why = "Relance proposée avant toute recherche : rien n’est encore vérifié.";
+            checks.put(Json.object("claim", claim, "verdict", "Piste provisoire", "provisional", true, "summary", why, "follow_up", followUp,
+                    "sources", new JSONArray(), "evidence", new JSONArray(), "connections", new JSONArray()));
+        }
+        return Json.object("checks", checks, "provisional", true, "checked_at", java.time.Instant.now().toString());
     }
     private static JSONArray strings(JSONArray values, int count, int max) {
         JSONArray result = new JSONArray(); if (values == null) return result;

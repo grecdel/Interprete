@@ -59,7 +59,7 @@ public final class MainActivity extends Activity implements InterpreteApp.EventS
         web = new WebView(this); web.setBackgroundColor(Color.rgb(243,241,248));
         WebView.setWebContentsDebuggingEnabled(BuildConfig.DEBUG);
         WebSettings settings = web.getSettings(); settings.setJavaScriptEnabled(true); settings.setDomStorageEnabled(true);
-        settings.setAllowFileAccess(false); settings.setAllowContentAccess(true); settings.setMixedContentMode(WebSettings.MIXED_CONTENT_NEVER_ALLOW);
+        settings.setAllowFileAccess(false); settings.setAllowContentAccess(false); settings.setMixedContentMode(WebSettings.MIXED_CONTENT_NEVER_ALLOW);
         settings.setJavaScriptCanOpenWindowsAutomatically(false); settings.setSupportMultipleWindows(false);
         web.addJavascriptInterface(new Bridge(), "InterpreteNative");
         web.setWebViewClient(new WebViewClient() {
@@ -67,12 +67,16 @@ public final class MainActivity extends Activity implements InterpreteApp.EventS
                 Uri uri = request.getUrl();
                 if (!"https".equals(uri.getScheme()) || !"app.interprete.local".equals(uri.getHost())) return blocked();
                 String filename = uri.getPath(); if (filename == null || filename.equals("/")) filename = "index.html"; else filename = filename.substring(1);
-                if (!java.util.Arrays.asList("index.html", "style.css", "app.js", "archive.js", "capture.js", "workspace.js", "documents.js", "analysis-tools.js", "launcher.js", "android.js", "android.css").contains(filename) && !(filename.startsWith("vendor/") && !filename.contains("..") && filename.matches("[A-Za-z0-9_./-]+"))) return blocked();
+                if (!java.util.Arrays.asList("index.html", "style.css", "app.js", "archive.js", "capture.js", "workspace.js", "documents.js", "analysis-tools.js", "launcher.js", "orb.js", "panel.js", "android.js", "android.css").contains(filename) && !(filename.startsWith("vendor/") && !filename.contains("..") && filename.matches("[A-Za-z0-9_./-]+"))) return blocked();
                 try {
                     String mime = (filename.endsWith(".js") || filename.endsWith(".mjs")) ? "text/javascript" : filename.endsWith(".css") ? "text/css" : filename.endsWith(".wasm") ? "application/wasm" : filename.endsWith(".html") ? "text/html" : "application/octet-stream";
                     Map<String,String> headers = new HashMap<>();
                     headers.put("Content-Security-Policy", "default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; worker-src 'self' blob:; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self'; object-src 'none'; frame-src 'none'");
                     headers.put("X-Content-Type-Options", "nosniff");
+                    // Emulated GPUs (gfxstream, SwiftShader) can freeze the whole device on a WebGL shader:
+                    // on an emulator the living bubble is not served and the CSS bubble stays.
+                    if ("orb.js".equals(filename) && emulatedGpu()) return new WebResourceResponse(mime, "UTF-8", 200, "OK", headers,
+                            new java.io.ByteArrayInputStream("/* Emulated GPU: CSS bubble. */".getBytes(java.nio.charset.StandardCharsets.UTF_8)));
                     return new WebResourceResponse(mime, "UTF-8", 200, "OK", headers, getAssets().open("web/" + filename));
                 } catch (Exception ignored) { return blocked(); }
             }
@@ -139,7 +143,16 @@ public final class MainActivity extends Activity implements InterpreteApp.EventS
         if (!ready || isDestroyed()) return;
         web.evaluateJavascript("window.InterpreteAndroidReceive(" + JSONObject.quote(event.toString()) + ")", null);
     }
+    static boolean emulatedGpu() {
+        String hardware = Build.HARDWARE == null ? "" : Build.HARDWARE.toLowerCase(java.util.Locale.ROOT);
+        String product = Build.PRODUCT == null ? "" : Build.PRODUCT.toLowerCase(java.util.Locale.ROOT);
+        String fingerprint = Build.FINGERPRINT == null ? "" : Build.FINGERPRINT;
+        return hardware.contains("ranchu") || hardware.contains("goldfish") || product.contains("sdk_gphone") || product.contains("emulator")
+                || fingerprint.startsWith("generic") || fingerprint.contains("emulator") || fingerprint.contains("sdk_gphone");
+    }
     public final class Bridge {
+        /** Emulated GPUs (gfxstream, SwiftShader) can kill the WebView renderer: the page then keeps the CSS bubble. */
+        @JavascriptInterface public boolean emulatedGpu() { return MainActivity.emulatedGpu(); }
         @JavascriptInterface public void postMessage(String raw) {
             if (raw == null || raw.length() > 16 * 1024 * 1024) return;
             try {
@@ -170,12 +183,12 @@ public final class MainActivity extends Activity implements InterpreteApp.EventS
                 break;
             case "launcher": app.resolve(id,new JSONObject());break;
             case "onboard":
-                String onboardingTheme=data.optString("theme");if(!java.util.Arrays.asList("pastel","dark","matrix","investigation").contains(onboardingTheme)){app.reject(id,"Thème inconnu.");break;}
+                String onboardingTheme=data.optString("theme");if(!java.util.Arrays.asList("pastel","dark","matrix","investigation","fire").contains(onboardingTheme)){app.reject(id,"Thème inconnu.");break;}
                 getSharedPreferences("preferences",MODE_PRIVATE).edit().putBoolean("onboardingComplete",true).putString("theme",onboardingTheme).apply();app.resolve(id,new JSONObject());break;
             case "theme":
-                String theme=data.optString("theme");if(!java.util.Arrays.asList("pastel","dark","matrix","investigation").contains(theme)){app.reject(id,"Thème inconnu.");break;}
+                String theme=data.optString("theme");if(!java.util.Arrays.asList("pastel","dark","matrix","investigation","fire").contains(theme)){app.reject(id,"Thème inconnu.");break;}
                 getSharedPreferences("preferences",MODE_PRIVATE).edit().putString("theme",theme).apply();
-                int background=Color.parseColor(theme.equals("dark")?"#10131d":theme.equals("matrix")?"#030c08":theme.equals("investigation")?"#e9dfca":"#f3eff9");
+                int background=Color.parseColor(theme.equals("dark")?"#10131d":theme.equals("matrix")?"#030c08":theme.equals("investigation")?"#e9dfca":theme.equals("fire")?"#140c0a":"#f3eff9");
                 web.setBackgroundColor(background);((android.view.View)web.getParent()).setBackgroundColor(background);
                 if(Build.VERSION.SDK_INT>=30&&getWindow().getInsetsController()!=null) {int light=android.view.WindowInsetsController.APPEARANCE_LIGHT_STATUS_BARS|android.view.WindowInsetsController.APPEARANCE_LIGHT_NAVIGATION_BARS;getWindow().getInsetsController().setSystemBarsAppearance(theme.equals("dark")||theme.equals("matrix")?0:light,light);}
                 app.resolve(id,new JSONObject());break;

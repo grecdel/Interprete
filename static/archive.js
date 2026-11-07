@@ -7,7 +7,7 @@ window.InterpreteArchive = (() => {
   const now = () => new Date().toISOString();
   const text = (value, limit = 20000) => typeof value === 'string' ? value.slice(0, limit) : '';
   const safeId = value => typeof value === 'string' && /^[A-Za-z0-9_-]{1,100}$/.test(value);
-  const session = {app: 'Interprete', version: 1, id: id('session'), created_at: now(), transcript: [], audio: [], captures: [], submissions: [], references: []};
+  const session = {app: 'Interprete', version: 1, id: id('session'), created_at: now(), transcript: [], audio: [], captures: [], submissions: [], references: [], corrections: []};
 
   function allClaims() {
     return session.submissions.flatMap(entry => (entry.checks || []).map(check => ({...check, original_text: entry.text, at: entry.at, session_title: 'Cette session'})));
@@ -15,6 +15,19 @@ window.InterpreteArchive = (() => {
   function recordTranscript(value, audioRef = null) {
     const record = {id: id('speech'), at: now(), text: value, speaker: 'non_identifie', audio_ref:audioRef};
     session.transcript.push(record); return record.id;
+  }
+  // F5: a corrected fragment keeps what was first heard, and every change is logged for the report.
+  // Verifications already sent keep the text they were based on.
+  function correctTranscript(identity, value) {
+    const record = session.transcript.find(item => item.id === identity);
+    const corrected = text(value, 20000).trim();
+    if (!record) throw new Error('Fragment introuvable.');
+    if (!corrected) throw new Error('Le fragment corrigé ne peut pas être vide.');
+    if (corrected === record.text) return false;
+    if (record.original_text === undefined) record.original_text = record.text;
+    session.corrections.push({id: id('correction'), at: now(), transcript_id: record.id, before: record.text, after: corrected});
+    record.text = corrected; record.corrected_at = now();
+    return true;
   }
   function recordCapture(action) { session.captures.push({at: now(), action}); }
   function createSubmission(value, kind, transcriptIds = []) {
@@ -56,8 +69,8 @@ window.InterpreteArchive = (() => {
   function snapshot() {
     return JSON.parse(JSON.stringify({...session, map_theme: document.documentElement.dataset.theme === 'investigation' ? 'investigation' : 'classic', exported_at: now()}));
   }
-  async function download(content, extension, mime) {
-    const name = `interprete-${session.created_at.slice(0, 10)}-${session.id.slice(-6)}.${extension}`;
+  async function download(content, extension, mime, label = '') {
+    const name = `interprete-${label ? label + '-' : ''}${session.created_at.slice(0, 10)}-${session.id.slice(-6)}.${extension}`;
     if (window.interpreteDesktop) return window.interpreteDesktop.saveArchive(content, extension, name);
     const blob = new Blob([content], {type: mime});
     const url = URL.createObjectURL(blob);
@@ -66,6 +79,54 @@ window.InterpreteArchive = (() => {
     document.body.append(anchor); anchor.click(); anchor.remove();
     setTimeout(() => URL.revokeObjectURL(url), 30000);
   }
+  // F7: a self-contained, script-free evidence report to share with the newsroom.
+  const escapeHtml = value => String(value ?? '').replace(/[&<>"']/g, character => ({'&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'}[character]));
+  function publicLink(value) {
+    try { const url = new URL(value); return ['http:', 'https:'].includes(url.protocol) && !url.username && !url.password ? url.href : ''; } catch { return ''; }
+  }
+  function proofLevel(check) {
+    const hosts = new Set((Array.isArray(check.sources) ? check.sources : []).map(source => { try { return new URL(source.url).hostname.replace(/^www\./, ''); } catch { return ''; } }).filter(Boolean));
+    if (!hosts.size) return 0; if (hosts.size === 1 || check.common_origin) return 1;
+    return (check.source_excerpts || []).some(excerpt => excerpt?.published_at) ? 3 : 2;
+  }
+  function preparationSection(preparation) {
+    if (!preparation) return '';
+    const facts = [['Interlocuteur', preparation.interlocuteur], ['Fonction', preparation.fonction], ['Sujet', preparation.sujet], ['Date', preparation.date]].filter(([, item]) => item);
+    const expected = (preparation.propos_attendus || []).map(item => `<li>${escapeHtml(item)}</li>`);
+    if (!facts.length && !expected.length) return '';
+    return `<section><h2>Préparation</h2>${facts.map(([label, item]) => `<p><strong>${label} :</strong> ${escapeHtml(item)}</p>`).join('')}${expected.length ? '<h3>Propos attendus</h3><ul>' + expected.join('') + '</ul>' : ''}</section>`;
+  }
+  function evidenceDocument(value) {
+    const levels = ['aucune source jointe', 'un seul site', 'sources recoupées', 'sources recoupées et datées'];
+    const date = new Date(value.created_at).toLocaleString('fr-FR');
+    const claims = value.submissions.flatMap(entry => (entry.checks || []).map(check => ({check, entry})));
+    const list = items => items.length ? `<ul>${items.join('')}</ul>` : '';
+    const sections = claims.map(({check, entry}, index) => {
+      const sources = (check.sources || []).map(source => { const href = publicLink(source.url); return href ? `<li><a href="${escapeHtml(href)}">${escapeHtml(source.title || href)}</a></li>` : ''; }).filter(Boolean);
+      const excerpts = (check.source_excerpts || []).map(excerpt => `<li><blockquote>${escapeHtml(excerpt.quote)}</blockquote><small>${excerpt.published_at ? 'Date indiquée : ' + escapeHtml(excerpt.published_at) + ' · ' : ''}extrait proposé, à relire dans le document original</small></li>`);
+      const pieces = (value.evidence || []).filter(piece => piece.claim_id === check.id).map(piece => `<li><strong>${escapeHtml(piece.name)}</strong> · SHA-256 ${escapeHtml(piece.sha256)}${piece.source ? ' · ' + escapeHtml(piece.source) : ''}${piece.notes ? `<br>${escapeHtml(piece.notes)}` : ''}</li>`);
+      const level = proofLevel(check), levelLabel = check.common_origin && level === 1 ? 'origine commune probable' : levels[level];
+      return `<section><h2>${index + 1}. ${escapeHtml(check.claim)}</h2>
+<p class="meta"><span class="verdict">${escapeHtml(check.verdict || 'À examiner')}</span> · Niveau de preuve ${level}/3 : ${levelLabel} · ${escapeHtml(new Date(entry.at).toLocaleTimeString('fr-FR'))}</p>
+<p class="said">Propos d’origine : « ${escapeHtml(entry.text.slice(0, 1200))} »</p>
+<p>${escapeHtml(check.summary)}</p>
+${check.follow_up ? `<p class="relance"><strong>Relance proposée :</strong> ${escapeHtml(check.follow_up)}</p>` : ''}
+${sources.length ? '<h3>Sources</h3>' + list(sources) : '<p class="warn">Aucune source jointe : rien ne permet de conclure.</p>'}
+${excerpts.length ? '<h3>Extraits</h3>' + list(excerpts) : ''}
+${(check.limitations || []).length ? '<h3>Limites</h3>' + list(check.limitations.map(item => `<li>${escapeHtml(item)}</li>`)) : ''}
+${pieces.length ? '<h3>Pièces du dossier</h3>' + list(pieces) : ''}
+</section>`;
+    }).join('\n');
+    const corrections = (value.corrections || []).map(item => `<li>${escapeHtml(new Date(item.at).toLocaleTimeString('fr-FR'))} : « ${escapeHtml(item.before)} » → « ${escapeHtml(item.after)} »</li>`);
+    return `<!doctype html><html lang="fr"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'"><title>Dossier de preuves · Interprète · ${escapeHtml(date)}</title>
+<style>body{font:16px/1.6 -apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;color:#2c2833;background:#fbfaf7;max-width:760px;margin:0 auto;padding:32px 18px}h1{font-size:28px;margin:0 0 6px}h2{font-size:20px;margin:0 0 6px}h3{font-size:13px;letter-spacing:.06em;text-transform:uppercase;color:#6b6475;margin:18px 0 4px}section{border-top:1px solid #e3ddd3;padding:22px 0}.meta{font-size:13px;color:#6b6475}.verdict{font-weight:600;color:#2c2833}.said{color:#4b4553;border-left:3px solid #d8cfe6;padding-left:12px}.relance{background:#f1edf8;padding:10px 12px;border-radius:8px}.warn{color:#8a4b2a}blockquote{margin:0;font-style:italic}small{color:#6b6475}a{color:#4a3fa0}.notice{font-size:13px;color:#6b6475}</style></head><body>
+<h1>Dossier de preuves</h1><p class="notice">Interview du ${escapeHtml(date)} · ${claims.length} propos examiné(s). Analyse automatique : les sources, extraits et relances restent à relire avant publication. Le niveau de preuve dépend des sources jointes, pas de la certitude d’un modèle.</p>
+${preparationSection(value.preparation)}
+${sections || '<p>Aucun propos vérifié dans cette session.</p>'}
+${corrections.length ? `<section><h2>Corrections de la transcription</h2>${list(corrections)}</section>` : ''}
+</body></html>`;
+  }
+  function exportEvidence() { return download(evidenceDocument(snapshot()), 'html', 'text/html;charset=utf-8', 'preuves'); }
   function exportJson() { return download(JSON.stringify(snapshot(), null, 2), 'json', 'application/json;charset=utf-8'); }
   function exportHtml() { return download(htmlDocument(snapshot()), 'html', 'text/html;charset=utf-8'); }
   function htmlDocument(value) {
@@ -134,7 +195,9 @@ window.InterpreteArchive = (() => {
     if (!data.transcript.length) $('transcript-list').append(element('p', 'muted', 'Aucune transcription micro dans cette session. Les textes et liens soumis sont conservés ci-dessous.'));
     for (const fragment of data.transcript) {
       const row = element('div', 'transcript-row'); row.id = fragment.id;
-      row.append(element('time', '', formatTime(fragment.at)), element('p', '', fragment.text)); if(fragment.audio_ref)audioFor(row,fragment.audio_ref.id); $('transcript-list').append(row);
+      row.append(element('time', '', formatTime(fragment.at)), element('p', '', fragment.text));
+      if (typeof fragment.original_text === 'string') row.querySelector('p').append(element('small', 'muted', ` · corrigé à la relecture ; entendu : « ${fragment.original_text} »`));
+      if(fragment.audio_ref)audioFor(row,fragment.audio_ref.id); $('transcript-list').append(row);
     }
     function renderClaim(claim, isPast = false) {
       const card = element('article', 'claim'); card.id = claim.id;
@@ -243,7 +306,8 @@ window.InterpreteArchive = (() => {
       $('map-search-status').textContent = query ? `${matches.size} élément(s) correspondant à la recherche` : `${nodes.length} éléments · sélectionnez une fiche pour suivre ses liens`;
       const visibleEdges = edges.filter(edge => (!query || matches.has(edge.from) || matches.has(edge.to)) && (!conflictsOnly || edge.kind === 'conflict') && (!selected || edge.from === selected || edge.to === selected));
       const activeIds = new Set(visibleEdges.flatMap(edge => [edge.from, edge.to]));
-      for (const {edge, el} of edgeElements) el.style.opacity = visibleEdges.includes(edge) ? '1' : '.06';
+      const shownEdges = new Set(visibleEdges);
+      for (const {edge, el} of edgeElements) el.style.opacity = shownEdges.has(edge) ? '1' : '.06';
       for (const {item, el} of nodeElements) el.style.opacity = (!selected && !conflictsOnly && (!query || matches.has(item.id))) || activeIds.has(item.id) || item.id === selected ? '1' : '.2';
       $('map-selection').replaceChildren();
       if (selected) {
@@ -346,5 +410,5 @@ window.InterpreteArchive = (() => {
 .map-tools label{font-size:12px;display:flex;gap:8px;align-items:center;flex-wrap:wrap}.map-tools input,.map-tools select{font:inherit;border:1px solid #d9d0c3;border-radius:7px;padding:9px;background:#fff;color:#443b32}.map-search-label{flex:1}.map-search-label input{min-width:160px;flex:1}.board-import{display:block;font-size:13px;margin:16px 0}.board-import input{display:block;margin-top:8px;max-width:100%}.board-hint{display:none}.board-pin{display:none}
 :root[data-board=investigation]{background:#e9e0cd;color:#392e26}[data-board=investigation] header{background:#342a24;color:#f3e8d0}[data-board=investigation] .map-scroll{background-color:#b68b57;background-image:radial-gradient(#58371645 .8px,transparent .9px),radial-gradient(#f4d4a655 1px,transparent 1.2px);background-position:0 0,3px 4px;background-size:7px 9px,11px 13px;border:12px solid #60432b;box-shadow:inset 0 0 35px #48270b66,0 12px 25px #39261225;border-radius:8px}[data-board=investigation] .map-node>rect{fill:#fff9e9;stroke:#d2c3a4;filter:drop-shadow(2px 4px 3px #432c1455)}[data-board=investigation] .node-evidence>rect,[data-board=investigation] .node-past>rect{fill:#edcf93;stroke:#b79862}[data-board=investigation] .has-photo>rect{fill:#fffef9;stroke:#d8d4c8}[data-board=investigation] #graph>path{stroke:#a9212b;stroke-width:2.4;filter:drop-shadow(0 1px 1px #48231155);marker-end:none}[data-board=investigation] .board-pin{display:block;fill:#a61f2d;stroke:#73151d;filter:drop-shadow(1px 2px 1px #0006)}[data-board=investigation] .node-category{fill:#785a36}[data-board=investigation] .node-label{fill:#3d3126}[data-board=investigation] .column-title{fill:#392c1d;font-weight:700}[data-board=investigation] .board-hint{display:block;background:#fff4d6;border-left:3px solid #a9212b;padding:10px 15px}[data-board=investigation] .map-selection{background:#fff3d5;color:#493b2a}[data-board=investigation] .claim{background:#fffaf0;border-color:#d9c8a6}@media print{.board-import,#map-search-status{display:none}}
 :root{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;color:#37313f;background:#f7f6f9;line-height:1.7}*{box-sizing:border-box}html{scroll-behavior:smooth}body{margin:0}header{display:flex;align-items:center;justify-content:space-between;padding:25px 5vw;border-bottom:1px solid #e5e0eb;background:#fff}.brand{font-size:20px;font-weight:650}.brand small{font-size:12px;color:#8c8299;font-weight:400;margin-left:14px}main{max-width:1200px;margin:auto;padding:45px 5vw}h1{font-size:42px;line-height:1.2;font-weight:550;letter-spacing:-1.5px}h2{font-size:21px;font-weight:550;margin-top:0}h3{font-size:17px;line-height:1.5}p,li{font-size:14px}a{color:#7d659b;overflow-wrap:anywhere}button{border:1px solid #ddd6e7;border-radius:7px;padding:8px 12px;background:#fff;color:#756486;cursor:pointer}button:focus-visible,a:focus-visible,.map-node:focus{outline:2px solid #8b73af;outline-offset:3px}button[aria-pressed=true]{background:#ede7f5;color:#6d528e}.eyebrow{font-size:10px;letter-spacing:1px;color:#95869d}.muted{color:#8b7f96;font-size:13px}.notice{background:#eee9f4;padding:16px 20px;border-radius:12px;color:#897599;font-size:12px}nav{display:flex;gap:20px;flex-wrap:wrap;margin:28px 0}nav a{font-size:13px;text-decoration:none}main>section{padding:35px 0;border-top:1px solid #e6e0ed;scroll-margin-top:20px}.transcript-row{display:grid;grid-template-columns:85px 1fr;gap:20px;padding:10px 0;border-bottom:1px solid #eee8f2}.transcript-row time{font-size:11px;color:#aa9bb5;padding-top:2px}.transcript-row p{margin:0;white-space:pre-wrap}.transcript-row:target,.claim:target{background:#f0eaf7;outline:2px solid #b8a2d1;outline-offset:5px}.map-scroll{overflow:auto;max-height:650px;border:1px solid #e4ddeb;border-radius:14px;background:#fbfafd;padding:14px;margin-top:18px}.map-tools{display:flex;gap:8px;align-items:center;flex-wrap:wrap}.map-tools span{font-size:11px;color:#9a8ca6;margin-left:auto}.legend{display:flex;gap:15px;flex-wrap:wrap;font-size:10px}.legend span:before{content:'—';margin-right:5px}.gray{color:#aaa1b4}.green{color:#699c80}.red{color:#bb7d70}.purple{color:#9682ae}.column-title{fill:#9e8db0;font-size:10px;letter-spacing:.5px}.node-label{fill:#6f5f7e;font-size:11px}.node-category{fill:#a391b1;font-size:9px}.map-node{cursor:pointer;transition:opacity .2s}.map-selection{background:#eee8f4;padding:14px 18px;border-radius:10px;margin-top:12px;font-size:12px;min-height:45px}.map-selection p{font-size:12px}.submission{margin:25px 0 40px}.entry-title{color:#8f7d9e;font-size:12px;font-weight:500}.claim{padding:22px;background:white;border:1px solid #e5deec;border-radius:14px;margin-top:14px;scroll-margin-top:20px}.claim-top{display:flex;justify-content:space-between;gap:15px;align-items:center}.claim time{font-size:10px;color:#aaa0b2}.badge{display:inline-block;padding:4px 8px;border-radius:6px;background:#f2edf7;font-size:10px;font-weight:550}.connection{border-left:2px solid #baa4d0;background:#f8f5fb;padding:12px 16px;margin:16px 0;font-size:12px}.connection.conflict{border-color:#c68a7b;background:#fcf3f0}.connection strong{display:block;color:#a08ab1;font-size:11px}.connection.conflict strong{color:#b67d70}.connection a{display:block;margin-top:7px}.connection p{font-size:12px;margin:8px 0}.connection small{color:#ad9db7;font-size:10px}.sources{padding-left:18px}.sources li{margin-bottom:8px;font-size:12px}.sources small{display:block;color:#a49bad;font-size:10px}summary{font-size:12px;color:#9d8baa;cursor:pointer}blockquote{font-size:13px;white-space:pre-wrap;max-height:350px;overflow:auto;border-left:2px solid #d3c4e0;padding-left:16px;color:#8f7c9f;margin:12px 0}.transcript-links{font-size:10px;color:#a694b3}footer{font-size:11px;color:#ac9db6;border-top:1px solid #e5deec;padding-top:20px;margin-top:20px}@media(max-width:600px){main{padding-top:25px}.brand small{display:block;margin-left:0}h1{font-size:34px}.transcript-row{grid-template-columns:65px 1fr;gap:10px}.claim{padding:16px}.map-tools span{margin-left:0}}@media print{body{background:white}header button,.map-tools{display:none}.map-scroll{max-height:none;overflow:visible}.map-scroll svg{max-width:100%;height:auto!important}details{display:block}details>*{display:block!important}.claim{break-inside:avoid}a{color:#4c3a61}a[href^="http"]:after{content:' (' attr(href) ')';font-size:9px}nav{display:none}}`;
-  return {session, labels, recordTranscript, recordCapture, createSubmission, completeSubmission, context, lookup, importArchive, exportJson, exportHtml, htmlDocument, snapshot};
+  return {session, labels, recordTranscript, correctTranscript, recordCapture, createSubmission, completeSubmission, context, lookup, importArchive, exportJson, exportHtml, exportEvidence, evidenceDocument, htmlDocument, snapshot};
 })();

@@ -3,10 +3,12 @@
 (() => {
   const MAX_FILE = 8 * 1024 * 1024, MAX_TOTAL = 64 * 1024 * 1024;
   const archive = window.InterpreteArchive;
-  const records = new Map(); let database;
+  const records = new Map(), extracting = new Set(); let database;
   const el = (tag, text, cls) => { const n = document.createElement(tag); if (text !== undefined) n.textContent = text; if (cls) n.className = cls; return n; };
   const button = (text, action) => { const n = el('button', text); n.type = 'button'; n.onclick = action; return n; };
-  const opener = button('Dossier d’enquête · pièces et outils', () => dialog.showModal()); opener.className = 'workspace-open';
+  const companionRoot = document.getElementById('companion');
+  // The companion may live in a Document Picture-in-Picture window: open dialogs there.
+  const opener = button('Dossier d’enquête · pièces et outils', () => { const host = companionRoot.ownerDocument; if (dialog.ownerDocument !== host || !dialog.isConnected) host.body.append(dialog); dialog.showModal(); }); opener.className = 'workspace-open';
   document.querySelector('.osint-tools').before(opener);
   const dialog = el('dialog', undefined, 'investigation'); dialog.setAttribute('aria-label', 'Dossier d’enquête');
   const header = el('header'); header.append(el('h2', 'Votre dossier d’enquête'), button('Fermer', () => dialog.close()));
@@ -24,15 +26,22 @@
     transaction.onerror = () => reject(new Error('Stockage local indisponible ou plein.'));
     transaction.onabort = () => reject(new Error('Enregistrement local annulé.'));
   });
-  function manifest() {
+  function manifest(changed = true) {
     archive.session.evidence = [...records.values()].map(({blob, ...record}) => record);
-    window.interpreteDesktop?.setUnsaved(true);
+    if (changed) window.interpreteDesktop?.setUnsaved(true);
   }
   async function save(record) { await tx('readwrite', store => store.put(record)); records.set(record.id, record); manifest(); render(); }
+  // Lower-cased search text, recomputed only when the record object changes (save() replaces it).
+  const indexCache = new WeakMap();
+  function searchIndex(record) {
+    let value = indexCache.get(record);
+    if (value === undefined) { value = `${record.name} ${record.notes || ''} ${record.text || ''}`.toLocaleLowerCase('fr'); indexCache.set(record, value); }
+    return value;
+  }
   function render() {
     list.replaceChildren(); const query = search.value.toLocaleLowerCase('fr');
     for (const record of records.values()) {
-      if (!`${record.name} ${record.notes} ${record.text}`.toLocaleLowerCase('fr').includes(query)) continue;
+      if (query && !searchIndex(record).includes(query)) continue;
       const card = el('article'); card.append(el('h3', record.name), el('p', `${record.size.toLocaleString('fr')} octets · SHA-256 ${record.sha256}`));
       const sourceLabel = el('label', 'Provenance / URL publique'); const source = el('input'); source.value = record.source || ''; sourceLabel.append(source);
       const noteLabel = el('label', 'Notes et passage pertinent'); const notes = el('textarea'); notes.value = record.notes || ''; notes.maxLength = 10000; noteLabel.append(notes);
@@ -52,19 +61,23 @@
       preview.append(el('pre', record.text || 'Texte non extrait. Pour un PDF ou une image, utilisez le bouton d’extraction locale. L’original reste conservé.'));
       if(record.type==='application/pdf'||/\.pdf$/i.test(record.name)||/^image\/(png|jpeg|webp)$/.test(record.type)) {
         const extract=button('Extraire le texte · PDF / OCR local',async()=>{
-          extract.disabled=true;
+          if(extracting.has(record.id))return;
+          extracting.add(record.id);extract.disabled=true;
           try {
             const result=await window.InterpreteDocuments.extract(record.blob,message=>{status.textContent=message;});
-            await save({...record,...result});
+            // Re-read the record: notes may have been saved while the extraction ran.
+            const current=records.get(record.id);
+            if(!current){status.textContent='La pièce a été supprimée pendant l’extraction.';return;}
+            await save({...current,...result});
             status.textContent=(result.text.trim()?'Texte extrait localement. ':'Aucun texte détecté. ')+(result.incomplete?'Extraction partielle (50 pages / 200 000 caractères maximum). ':'')+(result.extraction_method==='tesseract'?'OCR automatique à relire dans l’original.':'PDF scanné sans texte : OCR nécessaire sur ses images.');
           }catch(error){status.textContent='Extraction impossible : '+(error.message||'format non pris en charge.');}
-          finally{extract.disabled=false;}
-        });card.append(extract);
+          finally{extracting.delete(record.id);if(extract.isConnected)extract.disabled=false;else render();}
+        });extract.disabled=extracting.has(record.id);card.append(extract);
       }
       const use = button('Préparer une vérification', () => {
         const excerpt = notes.value.trim() || record.text;
         if (!excerpt) { status.textContent = 'Ajoutez d’abord le passage à vérifier dans les notes.'; return; }
-        const composer = document.getElementById('transcript');
+        const composer = companionRoot.querySelector('#transcript');
         if (composer.value.trim() && !window.confirm('Remplacer le texte actuellement saisi par cet extrait ?')) return;
         composer.value = excerpt.slice(0, 20000); composer.dispatchEvent(new Event('input', {bubbles:true})); dialog.close(); composer.focus();
       });
@@ -133,7 +146,7 @@
   });
   tools.append(toolTitle,el('p','La requête est transmise au fournisseur choisi au clic. Les fichiers du dossier ne sont pas envoyés. Ces notices sont des pistes, pas des preuves validées.'),provider,term,run,results);
   dialog.insertBefore(tools,input);
-  search.oninput = render;
+  let searchTimer; search.oninput = () => { clearTimeout(searchTimer); searchTimer = setTimeout(render, 180); };
   input.onchange = async () => {
     input.disabled = true;
     try {
@@ -184,7 +197,7 @@
       database.onversionchange = () => { database.close(); database = null; input.disabled = true; };
       try {
         for (const record of await tx('readonly', store => store.getAll())) records.set(record.id, record);
-        if (records.size) manifest(); input.disabled = false; render();
+        if (records.size) manifest(false); input.disabled = false; render();
         status.textContent = 'Dossier local prêt. La suppression des données de l’application efface les pièces conservées ici.';
       } catch (error) { status.textContent = error.message; }
     };

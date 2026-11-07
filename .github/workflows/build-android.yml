@@ -45,7 +45,7 @@ jobs:
       - name: Align APK and collect signing tool
         run: |
           mkdir -p android-output
-          "$ANDROID_HOME/build-tools/36.0.0/zipalign" -P 16 -f 4 android/app/build/outputs/apk/release/app-release-unsigned.apk android-output/Interprete-0.6.0-unsigned.apk
+          "$ANDROID_HOME/build-tools/36.0.0/zipalign" -P 16 -f 4 android/app/build/outputs/apk/release/app-release-unsigned.apk android-output/Interprete-0.7.0-unsigned.apk
           cp "$ANDROID_HOME/build-tools/36.0.0/lib/apksigner.jar" android-output/
           cp android/app/build/outputs/apk/debug/app-debug.apk android-output/
           cp android/app/build/outputs/apk/androidTest/debug/app-debug-androidTest.apk android-output/
@@ -97,9 +97,19 @@ jobs:
           script: |
             adb install -r android-output/app-debug.apk
             adb install -r android-output/app-debug-androidTest.apk
-            adb shell am instrument -w -r fr.interprete.assistant.test/androidx.test.runner.AndroidJUnitRunner | tee android-instrumentation.txt
-            adb logcat -d -s AndroidRuntime:E chromium:E > android-logcat.txt
-            adb pull /sdcard/Android/data/fr.interprete.assistant/files/android-failure.png android-failure.png || true
+            # Let the services started after boot settle before the WebView starts.
+            adb shell 'while [ "$(getprop sys.boot_completed)" != 1 ]; do sleep 2; done'
+            sleep 20
+            adb shell cat /proc/meminfo | head -3 || true
+            adb logcat -c
+            # Stream the log while the test runs: if the emulator dies, what happened before is kept.
+            nohup sh -c 'adb logcat -v time -s InterpreteTest:I chromium:I AndroidRuntime:E DEBUG:F libc:F > android-live-logcat.txt' > /dev/null 2>&1 &
+            timeout 600 adb shell am instrument -w -r fr.interprete.assistant.test/androidx.test.runner.AndroidJUnitRunner | tee android-instrumentation.txt || true
+            grep -v "js: " android-live-logcat.txt | tail -60 || true
+            timeout 60 adb logcat -d -s AndroidRuntime:E chromium:I InterpreteTest:I > android-logcat.txt || true
+            timeout 60 adb logcat -d -s lmkd:I ActivityManager:I | grep -iE "kill|lowmem|low memory" | tail -30 || true
+            timeout 60 adb logcat -d '*:W' | grep -iE "renderer|sandboxed_process|lowmemory|lmkd|killing|tombstone|DEBUG|libc|signal|fatal|abort|gpu|webgl|egl|gles" | tail -80 || true
+            timeout 60 adb pull /sdcard/Android/data/fr.interprete.assistant/files/android-failure.png android-failure.png || true
             python3 -c "from pathlib import Path; assert 'OK (1 test)' in Path('android-instrumentation.txt').read_text()"
             adb pull /sdcard/Android/data/fr.interprete.assistant/files/android-demo.png android-demo.png
       - uses: actions/upload-artifact@v4
@@ -110,6 +120,7 @@ jobs:
           path: |
             android-instrumentation.txt
             android-logcat.txt
+            android-live-logcat.txt
             android-failure.png
             android-demo.png
           if-no-files-found: ignore

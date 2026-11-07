@@ -20,7 +20,7 @@ with tempfile.TemporaryDirectory(prefix='interprete-certificate-') as folder:
     subprocess.run(['keytool', '-exportcert', '-alias', 'interprete-release', '-keystore', str(store), '-storepass:file', str(password), '-file', str(certificate)], check=True, capture_output=True)
     if certificate.read_bytes() != (root / 'android/signing-certificate.der').read_bytes():
         raise SystemExit('L’identité privée ne correspond pas au certificat public du projet.')
-version = '0.6.0'
+version = '0.7.0'
 args.output_dir.mkdir(parents=True, exist_ok=True)
 output = args.output_dir / f'Interprete-{version}-android.apk'
 jar = args.input_dir / 'apksigner.jar'

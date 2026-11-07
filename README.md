@@ -20,19 +20,21 @@ Quatre matières animées : **Pastel · eau**, **Sombre · électricité violett
 
 > **Prototype d’assistance journalistique.** Interprète propose des pistes, des sources et des relances. La rédaction garde la responsabilité du recoupement ; aucun verdict automatique n’est infaillible.
 
+> **Nouveau dans la 0.7** : une bulle vivante qui réagit à la voix, une relance rapide avant les sources, un niveau de preuve sur chaque carte, la préparation de l’interview, la correction de la transcription et un dossier de preuves à partager. [Voir les notes de version](docs/RELEASE-0.7.0.md).
+
 ## Le volet latéral : l’essentiel pendant l’échange
 
 Sur grand écran, le volet vise environ un quart de la largeur, avec une largeur minimale pour rester lisible. Sur téléphone, il s’adapte à l’écran. La fenêtre au-dessus des applications dépend de la plateforme et de ses permissions.
 
 | Zone du volet | Ce que vous y faites |
 | --- | --- |
-| **Bulle** | Ouvrir l’assistant et démarrer ou mettre en pause l’écoute, après configuration et autorisation du micro. |
+| **Bulle** | Fermée, elle ouvre l’assistant et affiche la relance prête. Volet ouvert, elle démarre ou met en pause l’écoute (aussi avec Espace sur ordinateur). Sa matière respire, suit la voix et signale l’analyse. |
 | **En-tête** | Accéder aux réglages et à l’archive, ou réduire le volet. Réduire le volet arrête le micro. |
-| **Ambiance** | Choisir pastel, sombre, Matrix ou enquête. La bulle s’accorde au thème. |
-| **Micro** | Écouter une interview ou un reportage diffusé près du micro. Les options de conservation audio sont disponibles sur Android. |
-| **Fil des vérifications** | Lire les affirmations examinées, les réserves, les sources et les questions de relance proposées. |
+| **Ambiance** | Dans les Réglages : automatique (clair ou sombre selon le système) par défaut, ou pastel, sombre, Matrix, enquête, feu. La bulle s’accorde au thème. |
+| **Micro** | Écouter une interview ou un reportage diffusé près du micro. La transcription en direct tient sur une ligne, dépliable. Les options de conservation audio sont disponibles sur Android. |
+| **Fil des vérifications** | Lire les affirmations examinées, leur niveau de preuve, les réserves, les sources et les questions de relance. Une relance provisoire apparaît d’abord, puis la vérification sourcée. |
 | **Zone de saisie** | Vérifier une phrase, un extrait d’article ou un lien public, sans passer par le micro. |
-| **Dossier d’enquête et outils** | Importer des pièces, consulter leur texte, lancer une recherche OSINT ou ouvrir les outils de jargon, calcul et citation. |
+| **Bouton « + »** | Préparer l’interview, ouvrir le dossier d’enquête, lancer une recherche OSINT ou les outils de jargon, calcul et citation. |
 
 Les réglages et l’archive s’ouvrent depuis le volet ; le dossier de pièces dispose d’une fenêtre dédiée. Les recherches prennent plusieurs secondes : une réponse instantanée pendant chaque échange n’est pas garantie.
 

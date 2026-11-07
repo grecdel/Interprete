@@ -19,6 +19,7 @@ public class ClaimNormalizerTest {
         JSONObject check = result.getJSONArray("checks").getJSONObject(0);
         assertEquals("À nuancer", check.getString("verdict")); assertEquals(1, check.getJSONArray("sources").length());
         assertTrue(check.getBoolean("review_required"));
+        assertEquals("Un seul site cité : le recoupement reste à compléter.", check.getJSONArray("limitations").getString(0));
     }
     @Test public void fabricatedLinksAndPastStatementsCannotBecomeEvidence() throws Exception {
         JSONObject analysis = Json.object("checks", Json.array(Json.object("claim", "Une affirmation", "verdict", "Confirmé", "source_urls", Json.array("https://invented.example/"),
@@ -43,6 +44,36 @@ public class ClaimNormalizerTest {
         for (int i = 0; i < 40; i++) source.put(Json.object("id", "claim_" + i, "claim", "Un propos passé."));
         assertEquals(24, ClaimNormalizer.context(source).length());
         assertEquals(0, ClaimNormalizer.context(Json.array(Json.object("id", "<script>", "claim", "Du texte"))).length());
+    }
+    @Test public void commonOriginNeedsSeveralSourcesAndIsShownFirst() throws Exception {
+        String a = "https://www.lemonde.fr/a", b = "https://www.lefigaro.fr/b";
+        JSONObject analysis = Json.object("checks", Json.array(Json.object("claim", "Une affirmation", "verdict", "À nuancer", "source_urls", Json.array(a, b),
+                "common_origin", Json.object("detected", true, "explanation", "La même dépêche AFP."))));
+        JSONObject check = ClaimNormalizer.parse(response(analysis, Json.object("url", a, "title", "A"), Json.object("url", b, "title", "B")), "text", new JSONArray()).getJSONArray("checks").getJSONObject(0);
+        assertEquals("La même dépêche AFP.", check.getString("common_origin"));
+        assertTrue(check.getJSONArray("limitations").getString(0).startsWith("Origine commune probable"));
+    }
+    @Test public void quickFollowUpIsProvisionalAndBounded() throws Exception {
+        JSONObject answer = Json.object("checks", Json.array(Json.object("claim", "Budget", "follow_up", "Quelle période ?"), Json.object("claim", "Sans relance"),
+                Json.object("claim", "Deux", "follow_up", "Q ?"), Json.object("claim", "Trois", "follow_up", "Q ?")));
+        JSONObject result = ClaimNormalizer.quick(Json.object("status", "completed", "output", Json.array(Json.object("type", "message", "content", Json.array(Json.object("type", "output_text", "text", answer.toString()))))));
+        assertTrue(result.getBoolean("provisional")); assertEquals(2, result.getJSONArray("checks").length());
+        assertEquals("Piste provisoire", result.getJSONArray("checks").getJSONObject(0).getString("verdict"));
+        assertEquals(0, result.getJSONArray("checks").getJSONObject(0).getJSONArray("sources").length());
+    }
+    @Test public void preparationIsBounded() {
+        StringBuilder long_ = new StringBuilder(); for (int i = 0; i < 3000; i++) long_.append('x');
+        JSONArray pieces = new JSONArray(); for (int i = 0; i < 5; i++) pieces.put(Json.object("nom", "Pièce", "extrait", long_.toString()));
+        JSONObject value = ClaimNormalizer.preparation(Json.object("sujet", "Budget 2026", "pieces", pieces, "inconnu", "x"));
+        assertEquals("Budget 2026", value.optString("sujet")); assertEquals(3, value.optJSONArray("pieces").length());
+        assertEquals(1500, value.optJSONArray("pieces").optJSONObject(0).optString("extrait").length()); assertFalse(value.has("inconnu"));
+        assertEquals(0, ClaimNormalizer.preparation(null).length());
+    }
+    @Test public void voiceLevelFollowsLoudness() {
+        byte[] silence = new byte[3200], loud = new byte[3200];
+        for (int i = 0; i < loud.length; i += 2) { short sample = (short) (i % 4 == 0 ? 16000 : -16000); loud[i] = (byte) sample; loud[i + 1] = (byte) (sample >> 8); }
+        assertEquals(0f, MicrophoneEngine.level(silence, silence.length), 0.001f);
+        assertTrue(MicrophoneEngine.level(loud, loud.length) > .9f);
     }
     @Test public void waveHeaderMatchesTheAudioActuallyCaptured() {
         byte[] pcm = new byte[]{1, 2, 3, 4}; byte[] wav = MicrophoneEngine.wav(pcm);

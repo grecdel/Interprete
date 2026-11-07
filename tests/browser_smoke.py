@@ -4,6 +4,7 @@ Run: python3 -m unittest discover -s tests -p browser_smoke.py -v
 Requires Playwright and Chromium. No API key or paid request is used.
 """
 import json
+import re
 import os
 import tempfile
 import threading
@@ -69,6 +70,10 @@ class BrowserChecks(unittest.TestCase):
     def setUp(self):
         self.context = self.browser.new_context(viewport={'width': 1440, 'height': 960}, accept_downloads=True)
         self.context.add_init_script(FAKE_MIC)
+        # Headless Chromium renders WebGL in software: opt in so the living bubble is exercised.
+        self.context.add_init_script("try { localStorage.setItem('interprete-orb', 'webgl'); } catch {}")
+        # The provisional quick follow-up (F4) sends a second request: tested on its own below.
+        self.context.add_init_script("try { if (!sessionStorage.getItem('keep-quick')) localStorage.setItem('interprete-quick', 'off'); } catch {}")
         self.page = self.context.new_page()
         self.errors, self.requests = [], []
         self.page.on('pageerror', lambda error: self.errors.append(str(error)))
@@ -98,6 +103,12 @@ class BrowserChecks(unittest.TestCase):
         expect(self.page.locator('.result-card').last).to_be_visible()
         expect(self.page.locator('.searching')).to_have_count(0)
 
+    def open_dossier(self):
+        # 0.7: the dossier sits behind the composer's "+" tools button.
+        if self.page.locator('#tools-menu').is_hidden():
+            self.page.locator('#tools-button').click()
+        self.page.locator('.workspace-open').click()
+
     def test_sidebar_is_a_quarter_and_mobile_composer_is_visible(self):
         box = self.page.locator('#assistant-panel').bounding_box()
         self.assertEqual(box['width'], 360)
@@ -108,25 +119,64 @@ class BrowserChecks(unittest.TestCase):
         self.assertFalse(self.page.evaluate('document.documentElement.scrollWidth > innerWidth'))
 
     def test_orb_materials_animate_and_respect_reduced_motion(self):
-        colors = set()
-        for theme in ['pastel', 'dark', 'matrix', 'investigation']:
+        # 0.7: one WebGL canvas replaces the CSS ribbons and particles, which no longer render.
+        expect(self.page.locator('#companion')).to_have_class(re.compile(r'\borb-gl\b'))
+        canvas = self.page.locator('#bubble .orb-canvas')
+        expect(canvas).to_be_visible()
+        expect(self.page.locator('#bubble .bubble-face')).to_be_hidden()
+        frames = set()
+        self.page.locator('#settings-button').click()  # UI2: the ambiance lives in the settings tray.
+        for theme in ['pastel', 'dark', 'matrix', 'investigation', 'fire']:
             self.page.locator('.theme-control select').select_option(theme)
-            orb = self.page.locator('#bubble .orb-ribbon').first
-            colors.add(orb.evaluate('el => getComputedStyle(el).borderTopColor'))
-            before = orb.evaluate('el => getComputedStyle(el).transform')
-            self.page.wait_for_timeout(150)
-            self.assertNotEqual(before, orb.evaluate('el => getComputedStyle(el).transform'))
-            self.assertEqual(self.page.locator('#bubble .orb-data').is_visible(), theme == 'matrix')
-            particles = self.page.locator('#bubble .orb-particle')
-            expect(particles).to_have_count(18)
-            before = particles.first.evaluate('el => getComputedStyle(el).transform')
-            self.page.wait_for_timeout(100)
-            self.assertNotEqual(before, particles.first.evaluate('el => getComputedStyle(el).transform'))
-        self.assertEqual(len(colors), 4)
+            self.page.wait_for_timeout(120)
+            first = canvas.screenshot()
+            self.page.wait_for_timeout(250)
+            second = canvas.screenshot()
+            self.assertNotEqual(first, second, theme + ' should move')
+            frames.add(second)
+        self.assertEqual(len(frames), 5)
         self.page.emulate_media(reduced_motion='reduce')
-        for selector in ['.orb-ribbon', '.orb-data', '.orb-particle', '.bubble-aura', '.bubble-face .orb-core']:
-            self.assertEqual(self.page.locator('#bubble ' + selector).first.evaluate(
-                'el => getComputedStyle(el).animationName'), 'none')
+        self.page.wait_for_timeout(200)
+        still = canvas.screenshot()
+        self.page.wait_for_timeout(300)
+        self.assertEqual(still, canvas.screenshot())
+        self.page.emulate_media(reduced_motion='no-preference')
+
+    def test_ambiance_in_settings_follows_system_by_default(self):
+        # UI2: no ambiance control in the panel header; the settings tray offers it, "Automatique" first.
+        expect(self.page.locator('.panel-header + .theme-control')).to_have_count(0)
+        self.page.locator('#settings-button').click()
+        select = self.page.locator('#settings-tray .theme-control select')
+        expect(select).to_have_value('auto')
+        expect(self.page.locator('#key-settings')).to_be_hidden()
+        html = self.page.locator('html')
+        expect(html).to_have_attribute('data-theme', 'pastel')
+        self.page.emulate_media(color_scheme='dark')
+        expect(html).to_have_attribute('data-theme', 'dark')
+        select.select_option('investigation')
+        self.page.emulate_media(color_scheme='light')
+        expect(html).to_have_attribute('data-theme', 'investigation')
+        self.page.reload()
+        expect(html).to_have_attribute('data-theme', 'investigation')
+        self.page.keyboard.press('Escape')
+
+    def test_orb_keeps_css_bubble_on_software_gpu(self):
+        # Without the opt-in, a software renderer (SwiftShader here) keeps the light CSS bubble.
+        page = self.browser.new_page()
+        page.goto(self.base)
+        page.wait_for_timeout(500)
+        expect(page.locator('#bubble .bubble-face')).to_be_visible()
+        self.assertEqual(page.locator('#bubble .orb-canvas').count(), 0)
+        self.assertFalse(page.evaluate("document.getElementById('companion').classList.contains('orb-gl')"))
+        page.close()
+
+    def test_orb_keeps_css_bubble_without_webgl(self):
+        page = self.browser.new_page()
+        page.add_init_script("HTMLCanvasElement.prototype.getContext = () => null;")
+        page.goto(self.base)
+        expect(page.locator('#bubble .bubble-face')).to_be_visible()
+        self.assertEqual(page.locator('#bubble .orb-canvas').count(), 0)
+        page.close()
 
     def test_orb_welcome_actions_and_panel_position(self):
         self.page.evaluate('localStorage.clear()')
@@ -183,6 +233,7 @@ class BrowserChecks(unittest.TestCase):
         self.page.clock.install()
         self.page.locator('#collapse').click()
         expect(self.page.locator('#assistant-panel')).to_be_hidden()
+        # Closed panel: the bubble still opens the actions.
         self.page.locator('#bubble').click()
         self.page.locator('[data-action=record]').click()
         expect(self.page.locator('#microphone')).to_have_attribute('aria-pressed', 'true')
@@ -198,6 +249,135 @@ class BrowserChecks(unittest.TestCase):
         self.assertEqual(snapshot['submissions'][0]['transcript_ids'], [snapshot['transcript'][0]['id']])
         self.page.locator('#collapse').click()
         expect(self.page.locator('#microphone')).to_have_attribute('aria-pressed', 'false')
+
+    def test_panel_07_bubble_microphone_shortcuts_and_proof_level(self):
+        # UI1: the open panel's bubble is the microphone; UI6: Space and Ctrl+K.
+        microphone = self.page.locator('#microphone')
+        self.page.locator('#bubble').click()
+        expect(microphone).to_have_attribute('aria-pressed', 'true')
+        self.page.evaluate('document.activeElement.blur()')
+        self.page.keyboard.press('Space')
+        expect(microphone).to_have_attribute('aria-pressed', 'false')
+        self.page.keyboard.press('Control+k')
+        expect(self.page.locator('#transcript')).to_be_focused()
+        # UI3: tools behind "+", closed with Escape.
+        expect(self.page.locator('#tools-menu')).to_be_hidden()
+        self.page.locator('#tools-button').click()
+        expect(self.page.locator('#tools-menu .workspace-open')).to_be_visible()
+        self.page.keyboard.press('Escape')
+        expect(self.page.locator('#tools-menu')).to_be_hidden()
+        expect(self.page.locator('#assistant-panel')).to_be_visible()
+        # UI4: one cited site gives level 1 of 3.
+        self.submit('Le budget a augmenté de 20 % depuis le début du mandat.')
+        meter = self.page.locator('.result-card .proof-meter').first
+        expect(meter).to_have_attribute('aria-label', 'Niveau de preuve 1 sur 3 : un seul site')
+        self.assertEqual(self.page.evaluate("""InterpreteProof.proofLevel({sources: [
+            {url: 'https://www.insee.fr/a'}, {url: 'https://ec.europa.eu/b'}],
+            source_excerpts: [{published_at: '2026-01-01'}]})"""), 3)
+
+    def test_followup_preview_on_closed_bubble(self):
+        # F2: a search that ends after the panel was reduced shows its question on the bubble.
+        held = []
+        self.page.unroute('**/api/verify')
+        self.page.route('**/api/verify', lambda route: held.append(route))
+        self.page.locator('#transcript').fill('Le budget a augmenté de 20 % depuis le début du mandat.')
+        self.page.locator('#verify').click()
+        self.page.wait_for_function('document.querySelector(".searching")')
+        self.page.locator('#collapse').click()
+        self.assertEqual(len(held), 1)
+        held[0].fulfill(json=fixture())
+        expect(self.page.locator('#companion')).to_have_class(re.compile(r'\bhas-followup\b'))
+        expect(self.page.locator('#bubble-label')).to_contain_text('Relance prête · De quelle période')
+        expect(self.page.locator('#bubble-label')).to_be_visible()
+        expect(self.page.locator('#bubble')).to_have_attribute('aria-label', re.compile('^Relance prête'))
+        self.page.evaluate('setPanelOpen(true)')
+        expect(self.page.locator('#companion')).not_to_have_class(re.compile(r'\bhas-followup\b'))
+
+    def test_transcript_correction_log_and_evidence_report(self):
+        # F5: correct a misheard fragment; F7: export the evidence report.
+        self.page.locator('#bubble').click()
+        self.page.evaluate("testMicrophone.emit('Le budget a augmenté de vingt pour cent selon le maire.')")
+        self.page.locator('#microphone').click()
+        self.submit('Le budget a augmenté de 20 % depuis le début du mandat.')
+        self.page.locator('#archive-button').click()
+        self.page.locator('#transcript-review summary').click()
+        field = self.page.locator('.transcript-review-row textarea').first
+        field.fill('Le budget a augmenté de 20 % selon le maire.')
+        self.page.locator('.transcript-review-row button').first.click()
+        expect(self.page.locator('#archive-status')).to_contain_text('Correction enregistrée')
+        expect(self.page.locator('.transcript-review-row small').first).to_contain_text('vingt pour cent')
+        session = self.page.evaluate('InterpreteArchive.snapshot()')
+        self.assertEqual(len(session['corrections']), 1)
+        self.assertEqual(session['transcript'][0]['original_text'], 'Le budget a augmenté de vingt pour cent selon le maire.')
+        with self.page.expect_download() as download:
+            self.page.locator('#export-evidence').click()
+        self.assertIn('preuves', download.value.suggested_filename)
+        path = Path(self.artifacts.name) / 'preuves.html'
+        download.value.save_as(path)
+        report = path.read_text(encoding='utf-8')
+        self.assertIn('Dossier de preuves', report)
+        self.assertIn('Niveau de preuve 1/3', report)
+        self.assertIn('De quelle période et de quel périmètre parlez-vous ?', report)
+        self.assertIn('Corrections de la transcription', report)
+        self.assertNotIn('<script', report.lower())
+
+    def test_quick_provisional_follow_up_then_full_verification(self):
+        # F4: the provisional card shows first, then gives way to the sourced result.
+        self.page.evaluate("localStorage.setItem('interprete-quick', 'on'); sessionStorage.setItem('keep-quick', '1')")
+        self.page.reload()
+        self.page.locator('#bubble').click()
+        self.page.locator('[data-action=panel]').click()
+        held, bodies = [], []
+        def route(route):
+            body = route.request.post_data_json; bodies.append(body)
+            if body.get('mode') == 'quick':
+                route.fulfill(json={'provisional': True, 'checks': [{'claim': 'Le budget a augmenté de 20 %', 'verdict': 'Piste provisoire',
+                    'provisional': True, 'summary': 'La période reste à vérifier.', 'follow_up': 'Sur quelle période ?', 'sources': []}]})
+            else:
+                held.append(route)
+        self.page.unroute('**/api/verify')
+        self.page.route('**/api/verify', route)
+        self.page.locator('#transcript').fill('Le budget a augmenté de 20 % depuis le début du mandat.')
+        self.page.locator('#verify').click()
+        expect(self.page.locator('.provisional-card')).to_contain_text('Sur quelle période ?')
+        expect(self.page.locator('.provisional-card .verdict')).to_contain_text('rien n’est encore vérifié')
+        self.assertEqual(sorted(body.get('mode', 'full') for body in bodies), ['full', 'quick'])
+        held[0].fulfill(json=fixture())
+        expect(self.page.locator('.result-card')).to_have_count(1)
+        expect(self.page.locator('.provisional-card')).to_have_count(0)
+
+    def test_common_origin_caps_proof_level(self):
+        # F6: two sites that repeat one wire story count as one.
+        result = fixture()
+        result['checks'][0]['sources'].append({'url': 'https://www.lemonde.fr/a', 'title': 'Le Monde'})
+        result['checks'][0]['common_origin'] = 'Les deux reprennent la même dépêche AFP.'
+        self.page.unroute('**/api/verify')
+        self.page.route('**/api/verify', lambda route: route.fulfill(json=result))
+        self.submit('Le budget a augmenté de 20 % depuis le début du mandat.')
+        expect(self.page.locator('.proof-meter').first).to_have_attribute('aria-label', 'Niveau de preuve 1 sur 3 : origine commune probable')
+
+    def test_preparation_context_and_keyword_priority(self):
+        # F3: the preparation travels with searches; a watched keyword skips the 20 s wait.
+        self.page.clock.install()
+        self.page.locator('#tools-button').click()
+        self.page.locator('#preparation summary').click()
+        self.page.locator('#prep-interlocutor').fill('Élu de test')
+        self.page.locator('#prep-topic').fill('Budget 2026')
+        self.page.locator('#prep-keywords').fill('crèches, 20 %')
+        self.page.locator('#prep-expected').fill('Le budget a augmenté de 20 % depuis le début du mandat.')
+        self.page.locator('#prep-run').click()
+        expect(self.page.locator('#preparation [role=status]')).to_contain_text('Propos attendus vérifiés')
+        self.assertEqual(self.requests[-1]['preparation']['sujet'], 'Budget 2026')
+        self.assertEqual(self.requests[-1]['preparation']['interlocuteur'], 'Élu de test')
+        before = len(self.requests)
+        self.page.locator('#tools-button').click()
+        self.page.locator('#bubble').click()
+        self.page.evaluate("testMicrophone.emit('Nous avons ouvert trois cents places en crèches cette année.')")
+        self.page.clock.fast_forward(1500)
+        expect(self.page.locator('.result-card')).to_have_count(2)
+        self.assertEqual(len(self.requests), before + 1)
+        snapshot = self.page.evaluate('InterpreteArchive.snapshot()')
+        self.assertEqual(snapshot['preparation']['mots_cles'], ['crèches', '20 %'])
 
     def test_html_archive_offline_map_and_json_import(self):
         self.submit('Un premier propos de test sur le budget annoncé.')
@@ -263,8 +443,8 @@ class BrowserChecks(unittest.TestCase):
 
     def test_transcript_export_is_complete_and_html_is_not_executed(self):
         unsafe = 'Un propos de test </script><script>window.INJECTED=true</script>.'
+        # 0.7: with the panel open, the bubble itself starts listening.
         self.page.locator('#bubble').click()
-        self.page.locator('[data-action=record]').click()
         self.page.evaluate('(text) => testMicrophone.emit(text)', unsafe)
         self.page.locator('#microphone').click()
         self.page.locator('#archive-button').click()
@@ -306,8 +486,8 @@ class BrowserChecks(unittest.TestCase):
         self.assertEqual(self.requests, [])
 
     def test_microphone_permission_failure_is_visible_and_stops_listening(self):
+        # 0.7: with the panel open, the bubble itself starts listening.
         self.page.locator('#bubble').click()
-        self.page.locator('[data-action=record]').click()
         self.page.evaluate("testMicrophone.onerror({error: 'not-allowed'})")
         expect(self.page.locator('#error')).to_contain_text('micro n’a pas été autorisé')
         expect(self.page.locator('#microphone')).to_have_attribute('aria-pressed', 'false')
@@ -341,7 +521,7 @@ class BrowserChecks(unittest.TestCase):
 
     def test_local_evidence_is_searchable_deduplicated_and_exported_without_binary(self):
         import hashlib
-        self.page.locator('.workspace-open').click()
+        self.open_dossier()
         expect(self.page.locator('#evidence-files')).to_be_enabled()
         payload = b'Le budget de reference est de 120 millions.'
         self.page.locator('#evidence-files').set_input_files({'name': 'budget.txt', 'mimeType': 'text/plain', 'buffer': payload})
@@ -373,14 +553,14 @@ class BrowserChecks(unittest.TestCase):
         self.page.reload()
         self.page.locator('#bubble').click()
         self.page.locator('[data-action=panel]').click()
-        self.page.locator('.workspace-open').click()
+        self.open_dossier()
         expect(self.page.locator('.evidence-list article')).to_have_count(1)
         expect(self.page.locator('.evidence-list textarea')).to_have_value('Passage à vérifier : 120 millions.')
 
 
     def test_direct_osint_notice_can_be_kept_without_verifying_it(self):
         self.page.route('**/api/osint',lambda route:route.fulfill(json={'provider':'crossref','query':'budget','retrieved_at':'2026-01-01T12:00:00Z','results':[{'title':'Publication de test','url':'https://doi.org/10.1/test','description':'Métadonnées de démonstration','provider':'crossref'}]}))
-        self.page.locator('.workspace-open').click()
+        self.open_dossier()
         expect(self.page.locator('#evidence-files')).to_be_enabled()
         self.page.get_by_role('searchbox',name='Recherche OSINT directe').fill('budget')
         self.page.get_by_role('button',name='Interroger cette source').click()
@@ -401,7 +581,7 @@ class BrowserChecks(unittest.TestCase):
         for index,obj in enumerate(objects,1):
             offsets.append(len(pdf));pdf+=str(index).encode()+b' 0 obj\n'+obj+b'\nendobj\n'
         xref=len(pdf);pdf+=b'xref\n0 6\n0000000000 65535 f \n'+b''.join(f'{offset:010d} 00000 n \n'.encode() for offset in offsets[1:])+b'trailer\n<< /Size 6 /Root 1 0 R >>\nstartxref\n'+str(xref).encode()+b'\n%%EOF'
-        self.page.locator('.workspace-open').click()
+        self.open_dossier()
         expect(self.page.locator('#evidence-files')).to_be_enabled()
         self.page.locator('#evidence-files').set_input_files({'name':'document.pdf','mimeType':'application/pdf','buffer':pdf})
         card=self.page.locator('.evidence-list article').filter(has=self.page.get_by_role('heading',name='document.pdf',exact=True))
@@ -416,6 +596,7 @@ class BrowserChecks(unittest.TestCase):
 
 
     def test_local_reading_tools_do_not_send_interview_content(self):
+        self.page.locator('#tools-button').click()
         self.page.locator('.analysis-tools summary').click()
         self.page.get_by_role('textbox',name='Texte à décrypter').fill('Un effet de base explique la désinflation.')
         self.page.get_by_role('button',name='Expliquer le jargon présent').click()

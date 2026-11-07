@@ -38,22 +38,22 @@ La fresque présente une scène par séquence : bande chronologique, locuteurs, 
 18. Historique de publication, correction et consultation des sources.
 19. Archives web pour comparer des versions publiques d’une page.
 20. Recherche scientifique avec DOI et signalement des rétractations.
-21. Détection des sources qui se recopient pour éviter le faux recoupement.
+21. Détection des sources qui se recopient pour éviter le faux recoupement. Ajouté dans la 0.7.
 22. Identification d’une source antérieure commune à plusieurs articles.
 23. Cache des documents avec date, provenance et règles d’expiration.
-24. Dossier préparatoire par interview pour réduire les recherches en direct.
-25. Deux vitesses : relance rapide explicitement provisoire, enquête approfondie.
+24. Dossier préparatoire par interview pour réduire les recherches en direct. Ajouté dans la 0.7.
+25. Deux vitesses : relance rapide explicitement provisoire, enquête approfondie. Ajouté dans la 0.7.
 26. Priorisation des affirmations selon leur impact et leur vérifiabilité.
-27. Indicateur du niveau de preuve, distinct de la certitude du modèle.
+27. Indicateur du niveau de preuve, distinct de la certitude du modèle. Ajouté dans la 0.7.
 28. Questions de relance courtes avec justification et source associée.
 29. Comparaison d’archives avec contrôle des dates et des interlocuteurs.
-30. Correction de la transcription avec journal des modifications.
+30. Correction de la transcription avec journal des modifications. Ajouté dans la 0.7.
 31. Recherche multilingue et conservation des citations dans leur langue.
 32. Mode hors ligne pour enregistrer et prendre des notes, recherches différées.
 33. Tableau de bord de latence, coût API et extraits encore non traités.
 34. Batterie de cas journalistiques évalués humainement avant chaque version.
 35. Suppression des données et durée de conservation configurables.
-36. Export d’un dossier de preuves partageable avec la rédaction.
+36. Export d’un dossier de preuves partageable avec la rédaction. Ajouté dans la 0.7.
 
 ## Conditions de qualité
 

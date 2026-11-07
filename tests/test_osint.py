@@ -71,7 +71,7 @@ class SearchTests(unittest.TestCase):
         import urllib.error
         from unittest.mock import patch
         body=json.dumps({'provider':'gdelt','query':'climate'}).encode()
-        handler=object.__new__(server.Handler);handler.path='/api/osint';handler.headers={'Content-Length':str(len(body))};handler.rfile=io.BytesIO(body);handler.authorized=lambda:True;handler.send_json=Mock()
+        handler=object.__new__(server.Handler);handler.path='/api/osint';handler.headers={'Content-Length':str(len(body)),'Host':'127.0.0.1:8000'};handler.server=Mock(server_address=('127.0.0.1',8000));handler.rfile=io.BytesIO(body);handler.authorized=lambda:True;handler.send_json=Mock()
         with patch('server.osint_search',side_effect=urllib.error.HTTPError('https://example.org',503,'Unavailable',{},None)):
             handler.do_POST()
         status,result=handler.send_json.call_args.args
