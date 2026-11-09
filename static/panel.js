@@ -49,6 +49,103 @@
   // Opening the dossier from the menu closes the menu behind it.
   find('.workspace-open')?.addEventListener('click', () => setMenu(false));
 
+  // Filming the interview: camera, or a screen or window with its sound. The video stays on this device;
+  // only the sound goes to transcription. Each transcript line keeps its moment in the video.
+  if (window.InterpreteVideo?.supported() && !window.InterpreteNative) {
+    const doc = companion.ownerDocument;
+    const make = (tag, text, className) => { const node = doc.createElement(tag); if (text !== undefined) node.textContent = text; if (className) node.className = className; return node; };
+    const box = make('div', undefined, 'video-tools'); box.id = 'video-tools';
+    box.append(make('p', 'Filmer l’interview', 'video-tools-title'), make('p', 'La vidéo reste sur cet appareil. Le son est transcrit, et chaque phrase garde son moment dans la vidéo.', 'video-tools-hint'));
+    const row = make('div', undefined, 'video-tools-row');
+    for (const [kind, label] of [['camera', 'Caméra'], ['screen', 'Écran ou fenêtre']]) {
+      const button = make('button', label, 'video-start'); button.type = 'button'; button.dataset.video = kind;
+      button.onclick = async () => { setMenu(false); if (wantedListening) await stopListening(); startListening({video: kind}); };
+      row.append(button);
+    }
+    box.append(row); menu.insertBefore(box, heading.nextSibling);
+
+    // Live preview while filming.
+    const live = make('div', undefined, 'video-live'); live.id = 'video-live'; live.hidden = true;
+    const view = make('video'); view.muted = true; view.autoplay = true; view.playsInline = true; view.setAttribute('aria-label', 'Aperçu de la vidéo en cours');
+    const rec = make('span', '● REC', 'video-rec'); const clockText = make('span', '00:00', 'video-clock');
+    const stop = make('button', 'Arrêter', 'video-stop'); stop.type = 'button'; stop.onclick = () => stopListening();
+    const bar = make('div', undefined, 'video-live-bar'); bar.append(rec, clockText, stop); live.append(view, bar);
+    find('#live-preview')?.before(live);
+    let tick = 0;
+    const clock = seconds => `${String(Math.floor(seconds / 60)).padStart(2, '0')}:${String(Math.floor(seconds % 60)).padStart(2, '0')}`;
+
+    // After filming: review with the transcript, and save the file.
+    const ready = make('div', undefined, 'video-ready'); ready.id = 'video-ready'; ready.hidden = true;
+    const readyText = make('p'); const review = make('button', 'Revoir avec la transcription', 'video-review'); review.type = 'button';
+    const save = make('button', 'Enregistrer la vidéo', 'video-save'); save.type = 'button';
+    const readyStatus = make('p', '', 'video-status'); readyStatus.setAttribute('role', 'status');
+    const actions = make('div', undefined, 'video-tools-row'); actions.append(review, save);
+    ready.append(readyText, actions, readyStatus); live.after(ready);
+    let result = null, url = '';
+    const stamp = () => { const d = new Date(result.startedAt); const two = n => String(n).padStart(2, '0'); return `${d.getFullYear()}-${two(d.getMonth() + 1)}-${two(d.getDate())}-${two(d.getHours())}h${two(d.getMinutes())}`; };
+
+    const dialog = make('div', undefined, 'video-dialog'); dialog.id = 'video-dialog'; dialog.hidden = true; dialog.setAttribute('role', 'dialog'); dialog.setAttribute('aria-label', 'Revoir l’interview');
+    const player = make('video'); player.controls = true; player.playsInline = true;
+    const lines = make('ol', undefined, 'video-lines');
+    const close = make('button', 'Fermer', 'video-close'); close.type = 'button';
+    const head = make('div', undefined, 'video-dialog-head'); head.append(make('strong', 'Revoir l’interview'), close);
+    const inner = make('div', undefined, 'video-dialog-inner'); inner.append(head, player, make('p', 'Touchez une phrase pour revoir le passage. La transcription est automatique : vérifiez les propos dans la vidéo.', 'video-tools-hint'), lines);
+    dialog.append(inner); doc.body.append(dialog);
+    const closeDialog = () => { player.pause(); dialog.hidden = true; review.focus(); };
+    close.onclick = closeDialog;
+    dialog.addEventListener('keydown', event => { if (event.key === 'Escape') { event.preventDefault(); event.stopPropagation(); closeDialog(); } });
+    player.ontimeupdate = () => {
+      let current = null;
+      for (const item of lines.children) { const at = Number(item.dataset.at); if (at <= player.currentTime + .5) current = item; item.classList.remove('current'); }
+      current?.classList.add('current');
+    };
+    review.onclick = () => {
+      lines.replaceChildren();
+      const fragments = archive.session.transcript.filter(fragment => Number.isFinite(fragment.video_at));
+      if (!fragments.length) lines.append(make('li', 'Aucune phrase transcrite pendant cette vidéo.', 'video-empty'));
+      for (const fragment of fragments) {
+        const item = make('li'); item.dataset.at = fragment.video_at; item.tabIndex = 0;
+        item.append(make('time', clock(fragment.video_at)), make('span', fragment.text));
+        const jump = () => { player.currentTime = Math.max(0, fragment.video_at - 1); player.play(); };
+        item.onclick = jump; item.onkeydown = event => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); jump(); } };
+        lines.append(item);
+      }
+      dialog.hidden = false; close.focus();
+    };
+    save.onclick = async () => {
+      if (!result) return;
+      const extension = result.type.includes('mp4') ? 'mp4' : 'webm', name = `Interprete-interview-${stamp()}.${extension}`;
+      save.disabled = true; readyStatus.textContent = 'Enregistrement de la vidéo…';
+      try {
+        let chosen = name;
+        if (window.interpreteDesktop?.saveVideo) { chosen = await window.interpreteDesktop.saveVideo(await result.blob.arrayBuffer(), name); if (!chosen) { readyStatus.textContent = 'Enregistrement annulé.'; return; } }
+        else { const link = make('a'); link.href = url; link.download = name; doc.body.append(link); link.click(); link.remove(); }
+        archive.setVideo({file_name: chosen, type: result.type, duration: result.duration, started_at: new Date(result.startedAt).toISOString(), source: result.source});
+        readyStatus.textContent = `Vidéo enregistrée : « ${chosen} ». Exportez le compte rendu HTML dans le même dossier pour revoir chaque phrase dans la vidéo.`;
+      } catch { readyStatus.textContent = 'La vidéo n’a pas pu être enregistrée. Elle reste disponible ici jusqu’à la fermeture.'; }
+      finally { save.disabled = false; }
+    };
+
+    let source = 'camera';
+    for (const button of row.children) button.addEventListener('click', () => { source = button.dataset.video; });
+    window.InterpreteVideoPanel = {
+      preview(stream) {
+        clearInterval(tick);
+        if (!stream) { live.hidden = true; view.srcObject = null; return; }
+        view.srcObject = stream; live.hidden = false; ready.hidden = true; const started = Date.now();
+        clockText.textContent = '00:00'; tick = setInterval(() => { clockText.textContent = clock((Date.now() - started) / 1000); }, 1000);
+      },
+      finished(value) {
+        if (!value) return;
+        if (url) URL.revokeObjectURL(url);
+        result = {...value, source}; url = URL.createObjectURL(value.blob); player.src = url;
+        readyText.textContent = `Vidéo de ${clock(value.duration)} prête (${Math.max(1, Math.round(value.blob.size / 1048576))} Mo). Elle sera perdue à la fermeture si vous ne l’enregistrez pas.`;
+        readyStatus.textContent = ''; ready.hidden = false;
+        if (typeof markUnsaved === 'function') markUnsaved(true);
+      }
+    };
+  }
+
   // UI6: keyboard shortcuts. Escape closes the tools menu before the panel's own Escape handling.
   const editable = target => target instanceof Element && target.closest('input, textarea, select, button, a, summary, [contenteditable], [role="button"]');
   function shortcuts(event) {

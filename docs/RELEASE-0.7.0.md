@@ -1,6 +1,6 @@
 # Interprète 0.7.0 — une bulle vivante, un volet épuré
 
-La bulle devient une matière vivante. Ses quatre matières suivent toujours le thème : eau, électricité violette, données numériques et fumée. Elle respire au repos, sa membrane suit la voix pendant l’écoute, elle tourne plus vite pendant l’analyse et pulse d’une teinte chaude quand une relance est prête. Sur un appareil sans processeur graphique matériel, ou si le rendu devient trop lent, l’ancienne bulle reste en place.
+La bulle devient une sphère de particules vivante, aux couleurs de chacune des cinq ambiances : une sphère en points, des rubans de fils lumineux et un anneau de poussière. Au repos, elle respire lentement ; pendant l’écoute, elle s’incline et sa surface ondule avec la voix ; pendant l’analyse, ses particules s’accélèrent et des ondes la balaient ; quand une relance est prête, elle libère une gerbe de lumière puis retrouve son calme. Sur un appareil sans processeur graphique matériel, ou si le rendu devient trop lent, une bulle simple reste en place, et la préférence système de réduction des mouvements est respectée.
 
 ## Pendant l’interview
 
@@ -12,6 +12,12 @@ La bulle devient une matière vivante. Ses quatre matières suivent toujours le 
 - **Relance prête sur la bulle fermée** : la question s’affiche à côté de la bulle jusqu’à la réouverture du volet.
 - **Ambiance rangée dans les Réglages** (bouton curseurs de l’en-tête) : par défaut, elle suit le mode clair ou sombre du système (Pastel ou Sombre) ; on peut aussi la fixer. Nouvelle ambiance **Feu**.
 - **Raccourcis sur ordinateur** : Espace pour écouter ou mettre en pause, Ctrl+K pour vérifier une phrase, Échap pour fermer.
+
+## Enregistrer et filmer
+
+- **L’enregistrement fonctionne dans tous les navigateurs.** Brave bloque la reconnaissance vocale intégrée, si bien que l’écoute s’arrêtait aussitôt lancée : le son passe désormais par le service de transcription local, comme dans l’application de bureau. Chrome garde sa reconnaissance instantanée et bascule tout seul si elle échoue.
+- **Filmer l’interview** (menu « + ») : avec la caméra, ou en filmant un écran ou une fenêtre avec son son (une émission, une visioconférence). La vidéo reste sur l’appareil ; seul le son est transcrit. Chaque phrase garde son moment dans la vidéo.
+- **Revoir avec la transcription** : après le tournage, la vidéo s’affiche avec les phrases transcrites ; une phrase touchée ramène au passage. La vidéo s’enregistre en un fichier, et le compte rendu HTML exporté dans le même dossier la lit et relie chaque phrase à son moment.
 
 ## Avant et après
 
@@ -32,6 +38,8 @@ La bulle devient une matière vivante. Ses quatre matières suivent toujours le 
 ## Installation
 
 - Android 8+ : installer `Interprete-0.7.0-android.apk`. La bulle au-dessus des applications utilise le nouveau rendu à partir d’Android 13.
-- Linux x86_64 : rendre `Interprete-0.7.0-linux-x86_64.AppImage` exécutable, puis le lancer.
+- Fedora : ouvrir `Interprete-0.7.0-linux-x86_64.rpm` d’un double-clic et choisir Installer ; Interprète rejoint les applications.
+- Autres Linux x86_64 : rendre `Interprete-0.7.0-linux-x86_64.AppImage` exécutable, puis le lancer. Une archive portable `.tar.gz` est également fournie.
+- Les sommes SHA-256 et les informations de signature Android accompagnent les fichiers.
 
 Prototype : les conclusions et les sources doivent être contrôlées avant un usage journalistique.
